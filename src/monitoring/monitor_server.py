@@ -1,0 +1,510 @@
+#!/usr/bin/env python3
+"""
+WSN Real-time Monitoring Server
+Nhận dữ liệu từ Sink qua CoAP và serve dashboard qua HTTP
+"""
+
+import asyncio
+import json
+import logging
+import time
+from datetime import datetime
+from collections import deque
+from flask import Flask, render_template, jsonify, send_from_directory
+from flask_cors import CORS
+import aiocoap
+import aiocoap.resource as resource
+import threading
+import re
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Flask app
+app = Flask(__name__)
+CORS(app)
+
+# Global data storage
+network_data = {
+    'timestamp': None,
+    'sink_id': None,
+    'version': None,
+    'active_routes': 0,
+    'total_packets_received': 0,
+    'total_packets_sent': 0,
+    'nodes': {},  # {node_id: {cluster, seq, energy, temp, latency, last_seen}}
+    'history': deque(maxlen=1000),  # Lưu lịch sử để vẽ charts
+    'fire_alerts': {}, # {node_id: timestamp}
+    'vna_events': deque(maxlen=50), # {timestamp, node_id, old_version, new_version}
+    'cluster_stats': {
+        1: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0},
+        2: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0}
+    }
+}
+
+# Parse Cooja log format
+LOG_PATTERNS = {
+    'rx': re.compile(r'RX sink=(?P<sink>\d+) cluster=(?P<cl>\d+) node=(?P<node>\d+) '
+                     r'seq=(?P<seq>\d+) energy_mj=(?P<e>\d+) temp_c=(?P<temp_int>\d+)\.(?P<temp_dec>\d+) '
+                     r'bytes=\d+ latency_ms=(?P<lat>\d+)'),
+    'tx': re.compile(r'(TX cluster=|NORMAL_TX|ATTACK_TX)'),
+    'dead': re.compile(r'DEAD cluster=(?P<cl>\d+) node=(?P<node>\d+) time_alive_s=(?P<alive>\d+)'),
+    'sink_start': re.compile(r'SINK_START sink=(?P<sink>\d+) version=(?P<ver>\d+_\d+)'),
+    'version': re.compile(r'VERSION_UPDATE sink=(?P<sink>\d+) old_version=(?P<old>\d+_\d+) '
+                          r'new_version=(?P<new>\d+_\d+)'),
+    'health': re.compile(r'HEALTH sink=(?P<sink>\d+) active_routes=(?P<routes>\d+) '
+                         r'version=(?P<ver>\d+_\d+)'),
+    'vna': re.compile(r'ID:(?P<node>\d+).*ATTACK_VNA: Triggered! Version changed (?P<old>\d+) -> (?P<new>\d+)'),
+    'parent_switch': re.compile(r'ID:(?P<node>\d+).*parent switch:'),
+}
+
+
+class CoAPDataResource(resource.Resource):
+    """CoAP resource để nhận dữ liệu từ Sink"""
+    
+    async def render_post(self, request):
+        """Xử lý POST request từ Sink"""
+        try:
+            payload = request.payload.decode('utf-8')
+            logger.info(f"CoAP POST received: {payload[:200]}...")
+            
+            # Parse log line
+            await self.parse_log_data(payload)
+            
+            return aiocoap.Message(code=aiocoap.CHANGED, payload=b'OK')
+        
+        except Exception as e:
+            logger.error(f"Error processing CoAP request: {e}")
+            return aiocoap.Message(code=aiocoap.BAD_REQUEST, payload=str(e).encode())
+    
+    async def parse_log_data(self, log_text):
+        """Parse log text và cập nhật network_data"""
+        global network_data
+        
+        lines = log_text.split('\n')
+        timestamp = datetime.now().timestamp()
+        
+        for line in lines:
+            # Parse RX messages (packet received at sink)
+            m = LOG_PATTERNS['rx'].search(line)
+            if m:
+                node_id = int(m.group('node'))
+                cluster = int(m.group('cl'))
+                seq = int(m.group('seq'))
+                energy = int(m.group('e'))
+                temp = float(f"{m.group('temp_int')}.{m.group('temp_dec')}")
+                latency = int(m.group('lat'))
+                
+                # Cập nhật node data
+                if node_id not in network_data['nodes']:
+                    network_data['nodes'][node_id] = {
+                        'cluster': cluster,
+                        'seq': seq,
+                        'energy_mj': energy,
+                        'temp_c': temp,
+                        'latency_ms': latency,
+                        'last_seen': timestamp,
+                        'packets_received': 1,
+                    }
+                else:
+                    network_data['nodes'][node_id].update({
+                        'seq': seq,
+                        'energy_mj': energy,
+                        'temp_c': temp,
+                        'latency_ms': latency,
+                        'last_seen': timestamp,
+                        'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
+                        'is_alive': True,  # Receiving data means node is alive
+                    })
+                
+                if temp > 60.0:
+                    network_data['fire_alerts'][node_id] = timestamp
+                elif node_id in network_data['fire_alerts']:
+                    del network_data['fire_alerts'][node_id]
+                
+                network_data['total_packets_received'] += 1
+                
+                # Add to history
+                network_data['history'].append({
+                    'timestamp': timestamp,
+                    'node_id': node_id,
+                    'energy_mj': energy,
+                    'temp_c': temp,
+                    'latency_ms': latency,
+                })
+                
+                logger.info(f"Updated node {node_id}: energy={energy}mJ, temp={temp}°C, latency={latency}ms")
+            
+            # Parse TX messages (packet sent from node)
+            m = LOG_PATTERNS['tx'].search(line)
+            if m:
+                network_data['total_packets_sent'] += 1
+            
+            # Parse VERSION_UPDATE
+            m = LOG_PATTERNS['version'].search(line)
+            if m:
+                network_data['version'] = m.group('new')
+                network_data['sink_id'] = int(m.group('sink'))
+                logger.info(f"Version updated to: {network_data['version']}")
+            
+            # Parse HEALTH
+            m = LOG_PATTERNS['health'].search(line)
+            if m:
+                network_data['active_routes'] = int(m.group('routes'))
+                network_data['version'] = m.group('ver')
+                network_data['sink_id'] = int(m.group('sink'))
+            
+            # Parse DEAD messages
+            m = LOG_PATTERNS['dead'].search(line)
+            if m:
+                node_id = int(m.group('node'))
+                if node_id in network_data['nodes']:
+                    network_data['nodes'][node_id]['is_alive'] = False
+                    network_data['nodes'][node_id]['energy_mj'] = 0
+                    logger.info(f"Node {node_id} DEAD")
+            
+            # Parse SINK_START messages
+            m = LOG_PATTERNS['sink_start'].search(line)
+            if m:
+                network_data['version'] = m.group('ver')
+                network_data['sink_id'] = int(m.group('sink'))
+                logger.info(f"Sink {network_data['sink_id']} started with version {network_data['version']}")
+        
+        network_data['timestamp'] = timestamp
+
+
+class LogFileWatcher(threading.Thread):
+    """Thread để theo dõi log file và tự động cập nhật"""
+    
+    def __init__(self, log_file_path):
+        super().__init__(daemon=True)
+        self.log_file_path = log_file_path
+        self.running = True
+    
+    def run(self):
+        """Đọc log file và parse real-time"""
+        logger.info(f"Watching log file: {self.log_file_path}")
+        
+        try:
+            with open(self.log_file_path, 'r') as f:
+                # ĐỌC TOÀN BỘ FILE TỪ ĐẦU (không skip đến cuối)
+                logger.info("Reading existing log data...")
+                line_count = 0
+                for line in f:
+                    self.process_line(line)
+                    line_count += 1
+                
+                logger.info(f"Processed {line_count} existing log lines")
+                
+                # Sau đó theo dõi log mới
+                while self.running:
+                    line = f.readline()
+                    if line:
+                        self.process_line(line)
+                    else:
+                        # Chờ 1 giây nếu không có dữ liệu mới
+                        threading.Event().wait(1)
+        
+        except FileNotFoundError:
+            logger.error(f"Log file not found: {self.log_file_path}")
+        except Exception as e:
+            logger.error(f"Error watching log file: {e}")
+    
+    def process_line(self, line):
+        """Process một dòng log"""
+        global network_data
+        timestamp = datetime.now().timestamp()
+        
+        # Parse RX
+        m = LOG_PATTERNS['rx'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            cluster = int(m.group('cl'))
+            seq = int(m.group('seq'))
+            energy = int(m.group('e'))
+            temp = float(f"{m.group('temp_int')}.{m.group('temp_dec')}")
+            # Parse và validate latency (cap tại 10000ms để tránh giá trị lỗi)
+            latency_raw = int(m.group('lat'))
+            latency = min(latency_raw, 10000)  # Max 10 giây
+            
+            if latency_raw > 10000:
+                logger.warning(f"Abnormal latency detected: {latency_raw}ms (capped to 10000ms)")
+            
+            if node_id not in network_data['nodes']:
+                network_data['nodes'][node_id] = {
+                    'cluster': cluster,
+                    'seq': seq,
+                    'energy_mj': energy,
+                    'temp_c': temp,
+                    'latency_ms': latency,
+                    'last_seen': timestamp,
+                    'packets_received': 1,
+                    'is_alive': True,  # Node is alive when sending data
+                }
+                logger.info(f"New node detected: {node_id}")
+            else:
+                network_data['nodes'][node_id].update({
+                    'seq': seq,
+                    'energy_mj': energy,
+                    'temp_c': temp,
+                    'latency_ms': latency,
+                    'last_seen': timestamp,
+                    'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
+                })
+            
+            if temp > 60.0:
+                network_data['fire_alerts'][node_id] = timestamp
+            elif node_id in network_data['fire_alerts']:
+                del network_data['fire_alerts'][node_id]
+            
+            network_data['total_packets_received'] += 1
+            network_data['history'].append({
+                'timestamp': timestamp,
+                'node_id': node_id,
+                'energy_mj': energy,
+                'temp_c': temp,
+                'latency_ms': latency,
+            })
+            
+            # Log mỗi 10 packets
+            if network_data['total_packets_received'] % 10 == 0:
+                logger.info(f"Processed {network_data['total_packets_received']} packets, {len(network_data['nodes'])} nodes")
+            return  # Found match, exit
+        
+        # Parse VNA Attack
+        m = LOG_PATTERNS['vna'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            network_data['vna_events'].append({
+                'timestamp': timestamp,
+                'node_id': node_id,
+                'old_version': m.group('old'),
+                'new_version': m.group('new')
+            })
+            logger.warning(f"VNA ATTACK DETECTED from node {node_id}")
+            return
+            
+        # Parse Parent Switch
+        m = LOG_PATTERNS['parent_switch'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            if node_id in network_data['nodes']:
+                cluster = network_data['nodes'][node_id]['cluster']
+                if cluster in network_data['cluster_stats']:
+                    network_data['cluster_stats'][cluster]['parent_switches'] += 1
+            return
+        
+        # Parse DEAD messages (node ran out of energy)
+        m = LOG_PATTERNS['dead'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            cluster = int(m.group('cl'))
+            time_alive = int(m.group('alive'))
+            
+            if node_id in network_data['nodes']:
+                network_data['nodes'][node_id]['is_alive'] = False
+                network_data['nodes'][node_id]['energy_mj'] = 0
+                logger.info(f"Node {node_id} DEAD (cluster={cluster}, alive={time_alive}s)")
+            return
+        
+        # Parse SINK_START messages
+        m = LOG_PATTERNS['sink_start'].search(line)
+        if m:
+            network_data['version'] = m.group('ver')
+            network_data['sink_id'] = int(m.group('sink'))
+            logger.info(f"Sink {network_data['sink_id']} started with version {network_data['version']}")
+            return
+        
+        # Parse TX
+        m = LOG_PATTERNS['tx'].search(line)
+        if m:
+            network_data['total_packets_sent'] += 1
+            return
+        
+        # Parse VERSION_UPDATE
+        m = LOG_PATTERNS['version'].search(line)
+        if m:
+            network_data['version'] = m.group('new')
+            network_data['sink_id'] = int(m.group('sink'))
+            logger.info(f"Version updated to: {network_data['version']}")
+            return
+        
+        # Parse HEALTH
+        m = LOG_PATTERNS['health'].search(line)
+        if m:
+            network_data['active_routes'] = int(m.group('routes'))
+            network_data['version'] = m.group('ver')
+            network_data['sink_id'] = int(m.group('sink'))
+            return
+    
+    def stop(self):
+        self.running = False
+
+
+# ============ Flask Routes ============
+
+@app.route('/')
+def index():
+    """Serve dashboard"""
+    return render_template('dashboard.html')
+
+@app.route('/api/network')
+def get_network_data():
+    """API để lấy dữ liệu network"""
+    current_time = datetime.now().timestamp()
+    
+    # Xóa các cảnh báo cháy cũ (quá 15 giây không nhận được tín hiệu)
+    if 'fire_alerts' in network_data:
+        stale_alerts = [n for n, t in network_data['fire_alerts'].items() if current_time - t > 15]
+        for n in stale_alerts:
+            del network_data['fire_alerts'][n]
+
+    # Đếm số node còn sống (is_alive=True)
+    active_nodes_count = sum(1 for node in network_data['nodes'].values() if node.get('is_alive', True))
+    
+    # Tách dữ liệu energy theo cluster
+    c1_nodes = [n for n in network_data['nodes'].values() if n.get('is_alive', True) and n['cluster'] == 1]
+    c2_nodes = [n for n in network_data['nodes'].values() if n.get('is_alive', True) and n['cluster'] == 2]
+    
+    avg_energy_c1 = sum(n['energy_mj'] for n in c1_nodes) / len(c1_nodes) if c1_nodes else 0
+    avg_energy_c2 = sum(n['energy_mj'] for n in c2_nodes) / len(c2_nodes) if c2_nodes else 0
+    
+    return jsonify({
+        'timestamp': network_data['timestamp'],
+        'sink_id': network_data['sink_id'],
+        'version': network_data['version'],
+        'active_routes': network_data['active_routes'],
+        'total_packets_received': network_data['total_packets_received'],
+        'total_packets_sent': network_data['total_packets_sent'],
+        'fire_alerts': list(network_data.get('fire_alerts', {}).keys()),
+        'active_nodes': active_nodes_count,  # Số node còn sống
+        'total_nodes': len(network_data['nodes']),  # Tổng số node đã thấy
+        'pdr': (network_data['total_packets_received'] / network_data['total_packets_sent'] * 100) 
+               if network_data['total_packets_sent'] > 0 else 0,
+        'cluster_stats': {
+            1: {'avg_energy': avg_energy_c1, 'parent_switches': network_data['cluster_stats'][1]['parent_switches']},
+            2: {'avg_energy': avg_energy_c2, 'parent_switches': network_data['cluster_stats'][2]['parent_switches']}
+        },
+        'vna_events': list(network_data['vna_events']),
+        'nodes': [
+            {
+                'node_id': node_id,
+                **node_data
+            }
+            for node_id, node_data in network_data['nodes'].items()
+        ]
+    })
+
+@app.route('/api/history')
+def get_history():
+    """API để lấy lịch sử dữ liệu"""
+    return jsonify(list(network_data['history']))
+
+@app.route('/api/stats')
+def get_stats():
+    """API để lấy thống kê tổng quan"""
+    nodes = network_data['nodes']
+    
+    if not nodes:
+        return jsonify({
+            'total_nodes': 0,
+            'avg_energy': 0,
+            'avg_temp': 0,
+            'avg_latency': 0,
+            'nodes_alive': 0,
+        })
+    
+    # Chỉ tính average cho node còn sống
+    alive_nodes = [n for n in nodes.values() if n.get('is_alive', True)]
+    
+    return jsonify({
+        'total_nodes': len(nodes),
+        'avg_energy': sum(n['energy_mj'] for n in alive_nodes) / len(alive_nodes) if alive_nodes else 0,
+        'avg_temp': sum(n['temp_c'] for n in alive_nodes) / len(alive_nodes) if alive_nodes else 0,
+        'avg_latency': sum(n['latency_ms'] for n in alive_nodes) / len(alive_nodes) if alive_nodes else 0,
+        'nodes_alive': len(alive_nodes),
+    })
+
+
+# ============ CoAP Server ============
+
+async def run_coap_server():
+    """Chạy CoAP server"""
+    root = resource.Site()
+    root.add_resource(['data'], CoAPDataResource())
+    
+    # Note: aiocoap on Windows requires specific interface, not 0.0.0.0
+    # Use localhost (::1 for IPv6) or specific interface address
+    try:
+        await aiocoap.Context.create_server_context(root, bind=('::1', 5683))
+        logger.info("CoAP server started on coap://[::1]:5683/data")
+    except Exception as e:
+        logger.warning(f"Could not bind CoAP to IPv6, trying IPv4: {e}")
+        try:
+            await aiocoap.Context.create_server_context(root, bind=('127.0.0.1', 5683))
+            logger.info("CoAP server started on coap://127.0.0.1:5683/data")
+        except Exception as e2:
+            logger.error(f"Could not start CoAP server: {e2}")
+            logger.info("Continuing without CoAP (log file mode only)")
+            return
+    
+    # Keep running
+    await asyncio.get_running_loop().create_future()
+
+
+def start_coap_server():
+    """Start CoAP server in separate thread"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(run_coap_server())
+
+
+# ============ Main ============
+
+if __name__ == '__main__':
+    import sys
+    from pathlib import Path
+    
+    logger.info("=" * 60)
+    logger.info("WSN Real-time Monitoring Server")
+    logger.info("=" * 60)
+    
+    # Check for log file argument
+    log_files_to_watch = []
+    
+    if len(sys.argv) > 1:
+        log_path = Path(sys.argv[1])
+        log_dir = log_path.parent
+        
+        # Tìm tất cả log files (run.log, run2.log, run3.log...)
+        if log_dir.exists():
+            all_logs = sorted(log_dir.glob('run*.log'))
+            if all_logs:
+                logger.info(f"Found {len(all_logs)} log files in {log_dir}")
+                for log in all_logs:
+                    logger.info(f"  - {log.name} ({log.stat().st_size / 1024:.1f} KB)")
+                    watcher = LogFileWatcher(str(log))
+                    watcher.start()
+                    log_files_to_watch.append(log)
+            else:
+                logger.warning(f"No log files found in {log_dir}")
+        else:
+            logger.warning(f"Log directory not found: {log_dir}")
+    else:
+        logger.info("No log file specified. Server will run in API-only mode")
+        logger.info("Usage: python monitor_server.py [path_to_log_file]")
+    
+    # Start CoAP server in separate thread (optional - may fail on Windows)
+    logger.info("Attempting to start CoAP server...")
+    coap_thread = threading.Thread(target=start_coap_server, daemon=True)
+    coap_thread.start()
+    time.sleep(1)  # Give CoAP time to start or fail
+    
+    logger.info("Starting Flask web server...")
+    logger.info("Dashboard: http://localhost:5000")
+    logger.info("API: http://localhost:5000/api/network")
+    logger.info("=" * 60)
+    
+    # Start Flask app
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
