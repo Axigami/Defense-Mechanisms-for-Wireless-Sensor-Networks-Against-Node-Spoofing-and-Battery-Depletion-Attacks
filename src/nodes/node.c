@@ -29,6 +29,7 @@ typedef struct {
   uint32_t seqno;
   uint32_t residual_mj;
   uint32_t tx_time;
+  int16_t temperature_c;
 } sensor_payload_t;
 
 static struct simple_udp_connection udp_conn;
@@ -118,7 +119,8 @@ PROCESS_THREAD(node_process, ev, data)
        NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
       sensor_payload_t p = {
         .cluster_id = cluster_id, .node_id_f = node_id,
-        .seqno = sent_count++, .residual_mj = residual_mj, .tx_time = clock_time()
+        .seqno = sent_count++, .residual_mj = residual_mj, .tx_time = clock_time(),
+        .temperature_c = (int16_t)(250 + (random_rand() % 50))
       };
       simple_udp_sendto(&udp_conn, &p, sizeof(p), &dest_ipaddr);
       LOG_INFO("TX cluster=%u node=%u seq=%lu energy_mj=%lu bytes=%u\n",

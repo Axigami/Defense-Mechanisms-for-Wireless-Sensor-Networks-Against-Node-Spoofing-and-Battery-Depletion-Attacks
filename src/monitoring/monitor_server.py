@@ -35,6 +35,12 @@ network_data = {
     'total_packets_sent': 0,
     'nodes': {},  # {node_id: {cluster, seq, energy, temp, latency, last_seen}}
     'history': deque(maxlen=1000),  # Lưu lịch sử để vẽ charts
+    'fire_alerts': {}, # {node_id: timestamp}
+    'vna_events': deque(maxlen=50), # {timestamp, node_id, old_version, new_version}
+    'cluster_stats': {
+        1: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0},
+        2: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0}
+    }
 }
 
 # Parse Cooja log format
@@ -42,14 +48,15 @@ LOG_PATTERNS = {
     'rx': re.compile(r'RX sink=(?P<sink>\d+) cluster=(?P<cl>\d+) node=(?P<node>\d+) '
                      r'seq=(?P<seq>\d+) energy_mj=(?P<e>\d+) temp_c=(?P<temp_int>\d+)\.(?P<temp_dec>\d+) '
                      r'bytes=\d+ latency_ms=(?P<lat>\d+)'),
-    'tx': re.compile(r'TX cluster=(?P<cl>\d+) node=(?P<node>\d+) seq=(?P<seq>\d+) '
-                     r'energy_mj=(?P<e>\d+) temp_c=(?P<temp_int>\d+)\.(?P<temp_dec>\d+)'),
+    'tx': re.compile(r'(TX cluster=|NORMAL_TX|ATTACK_TX)'),
     'dead': re.compile(r'DEAD cluster=(?P<cl>\d+) node=(?P<node>\d+) time_alive_s=(?P<alive>\d+)'),
     'sink_start': re.compile(r'SINK_START sink=(?P<sink>\d+) version=(?P<ver>\d+_\d+)'),
     'version': re.compile(r'VERSION_UPDATE sink=(?P<sink>\d+) old_version=(?P<old>\d+_\d+) '
                           r'new_version=(?P<new>\d+_\d+)'),
     'health': re.compile(r'HEALTH sink=(?P<sink>\d+) active_routes=(?P<routes>\d+) '
                          r'version=(?P<ver>\d+_\d+)'),
+    'vna': re.compile(r'ID:(?P<node>\d+).*ATTACK_VNA: Triggered! Version changed (?P<old>\d+) -> (?P<new>\d+)'),
+    'parent_switch': re.compile(r'ID:(?P<node>\d+).*parent switch:'),
 }
 
 
@@ -110,6 +117,11 @@ class CoAPDataResource(resource.Resource):
                         'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
                         'is_alive': True,  # Receiving data means node is alive
                     })
+                
+                if temp > 60.0:
+                    network_data['fire_alerts'][node_id] = timestamp
+                elif node_id in network_data['fire_alerts']:
+                    del network_data['fire_alerts'][node_id]
                 
                 network_data['total_packets_received'] += 1
                 
@@ -241,6 +253,11 @@ class LogFileWatcher(threading.Thread):
                     'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
                 })
             
+            if temp > 60.0:
+                network_data['fire_alerts'][node_id] = timestamp
+            elif node_id in network_data['fire_alerts']:
+                del network_data['fire_alerts'][node_id]
+            
             network_data['total_packets_received'] += 1
             network_data['history'].append({
                 'timestamp': timestamp,
@@ -254,6 +271,29 @@ class LogFileWatcher(threading.Thread):
             if network_data['total_packets_received'] % 10 == 0:
                 logger.info(f"Processed {network_data['total_packets_received']} packets, {len(network_data['nodes'])} nodes")
             return  # Found match, exit
+        
+        # Parse VNA Attack
+        m = LOG_PATTERNS['vna'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            network_data['vna_events'].append({
+                'timestamp': timestamp,
+                'node_id': node_id,
+                'old_version': m.group('old'),
+                'new_version': m.group('new')
+            })
+            logger.warning(f"VNA ATTACK DETECTED from node {node_id}")
+            return
+            
+        # Parse Parent Switch
+        m = LOG_PATTERNS['parent_switch'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            if node_id in network_data['nodes']:
+                cluster = network_data['nodes'][node_id]['cluster']
+                if cluster in network_data['cluster_stats']:
+                    network_data['cluster_stats'][cluster]['parent_switches'] += 1
+            return
         
         # Parse DEAD messages (node ran out of energy)
         m = LOG_PATTERNS['dead'].search(line)
@@ -312,8 +352,23 @@ def index():
 @app.route('/api/network')
 def get_network_data():
     """API để lấy dữ liệu network"""
+    current_time = datetime.now().timestamp()
+    
+    # Xóa các cảnh báo cháy cũ (quá 15 giây không nhận được tín hiệu)
+    if 'fire_alerts' in network_data:
+        stale_alerts = [n for n, t in network_data['fire_alerts'].items() if current_time - t > 15]
+        for n in stale_alerts:
+            del network_data['fire_alerts'][n]
+
     # Đếm số node còn sống (is_alive=True)
     active_nodes_count = sum(1 for node in network_data['nodes'].values() if node.get('is_alive', True))
+    
+    # Tách dữ liệu energy theo cluster
+    c1_nodes = [n for n in network_data['nodes'].values() if n.get('is_alive', True) and n['cluster'] == 1]
+    c2_nodes = [n for n in network_data['nodes'].values() if n.get('is_alive', True) and n['cluster'] == 2]
+    
+    avg_energy_c1 = sum(n['energy_mj'] for n in c1_nodes) / len(c1_nodes) if c1_nodes else 0
+    avg_energy_c2 = sum(n['energy_mj'] for n in c2_nodes) / len(c2_nodes) if c2_nodes else 0
     
     return jsonify({
         'timestamp': network_data['timestamp'],
@@ -322,10 +377,16 @@ def get_network_data():
         'active_routes': network_data['active_routes'],
         'total_packets_received': network_data['total_packets_received'],
         'total_packets_sent': network_data['total_packets_sent'],
+        'fire_alerts': list(network_data.get('fire_alerts', {}).keys()),
         'active_nodes': active_nodes_count,  # Số node còn sống
         'total_nodes': len(network_data['nodes']),  # Tổng số node đã thấy
         'pdr': (network_data['total_packets_received'] / network_data['total_packets_sent'] * 100) 
                if network_data['total_packets_sent'] > 0 else 0,
+        'cluster_stats': {
+            1: {'avg_energy': avg_energy_c1, 'parent_switches': network_data['cluster_stats'][1]['parent_switches']},
+            2: {'avg_energy': avg_energy_c2, 'parent_switches': network_data['cluster_stats'][2]['parent_switches']}
+        },
+        'vna_events': list(network_data['vna_events']),
         'nodes': [
             {
                 'node_id': node_id,
