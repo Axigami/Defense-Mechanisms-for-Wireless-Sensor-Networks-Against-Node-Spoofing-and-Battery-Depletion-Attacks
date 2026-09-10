@@ -25,8 +25,6 @@ typedef struct {
 } sensor_payload_t;
 
 static struct simple_udp_connection udp_conn;
-static uint16_t current_version = 2026;  /* Version ban đầu: 2026_1 */
-static uint16_t current_subversion = 1;
 
 static void
 rx_callback(struct simple_udp_connection *c,
@@ -75,7 +73,7 @@ PROCESS_THREAD(sink_process, ev, data)
   PROCESS_BEGIN();
   NETSTACK_ROUTING.root_start();
   simple_udp_register(&udp_conn, SEND_PORT, NULL, SEND_PORT, rx_callback);
-  LOG_INFO("SINK_START sink=%u version=%u_%u\n", node_id, current_version, current_subversion);
+  LOG_INFO("SINK_START sink=%u version=%u\n", node_id, curr_instance.dag.version);
   PROCESS_END();
 }
 
@@ -86,8 +84,7 @@ PROCESS_THREAD(health_process, ev, data)
   while(1) {
     etimer_set(&et, HEALTH_INTERVAL);
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-    LOG_INFO("HEALTH sink=%u active_routes=%u version=%u_%u\n", 
-             node_id, uip_ds6_route_num_routes(), current_version, current_subversion);
+    LOG_INFO("HEALTH sink=%u active_routes=%u version=%u\n", node_id, uip_ds6_route_num_routes(), curr_instance.dag.version);
   }
   PROCESS_END();
 }
@@ -105,20 +102,14 @@ PROCESS_THREAD(version_update_process, ev, data)
     etimer_set(&et, VERSION_UPDATE_INTERVAL);
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
     
-    // Save old version
-    uint16_t old_version = current_version;
-    uint16_t old_subversion = current_subversion;
-    
-    // Increment version
-    current_subversion++;
-    
-    LOG_INFO("VERSION_UPDATE sink=%u old_version=%u_%u new_version=%u_%u\n",
-             node_id, old_version, old_subversion, current_version, current_subversion);
-    
-    // Trigger global repair - Gây ra rerouting toàn network
-    rpl_global_repair("Periodic version update");
-    
-    LOG_INFO("GLOBAL_REPAIR_TRIGGERED sink=%u reason=version_update\n", node_id);
+    // Trigger global repair which increments version
+    if(curr_instance.used) {
+        uint8_t old_version = curr_instance.dag.version;
+        rpl_global_repair("Periodic version update");
+        LOG_INFO("VERSION_UPDATE sink=%u old_version=%u new_version=%u\n",
+                 node_id, old_version, curr_instance.dag.version);
+        LOG_INFO("GLOBAL_REPAIR_TRIGGERED sink=%u reason=version_update\n", node_id);
+    }
   }
   
   PROCESS_END();

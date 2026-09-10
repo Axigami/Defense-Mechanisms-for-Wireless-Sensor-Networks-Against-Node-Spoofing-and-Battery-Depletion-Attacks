@@ -13,9 +13,9 @@
 
 #define SEND_PORT 8765
 #define SEND_INTERVAL     (60 * CLOCK_SECOND)
-#define STATUS_INTERVAL   (5 * 60 * CLOCK_SECOND)
+#define STATUS_INTERVAL   (5 * CLOCK_SECOND)
 
-#define INITIAL_ENERGY_MJ 7200
+#define INITIAL_ENERGY_MJ 15000
 
 #define VOLTAGE_V        3.0
 #define CURRENT_TX_MA    17.4
@@ -84,7 +84,6 @@ PROCESS_THREAD(node_process, ev, data)
 
   PROCESS_BEGIN();
   sim_start_time = clock_time();
-  cluster_id = (node_id <= 26) ? 1 : 2;
 
   simple_udp_register(&udp_conn, SEND_PORT, NULL, SEND_PORT, NULL);
   etimer_set(&et, random_rand() % SEND_INTERVAL);
@@ -113,10 +112,16 @@ PROCESS_THREAD(node_process, ev, data)
     }
 
     gen_count++;
-    LOG_INFO("GEN cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
 
     if(NETSTACK_ROUTING.node_is_reachable() &&
        NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
+      
+      uint8_t root_id = dest_ipaddr.u8[15];
+      if(root_id == 1) cluster_id = 1;
+      else if(root_id == 27 || root_id == 0x1b) cluster_id = 2;
+
+      LOG_INFO("GEN cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
+
       sensor_payload_t p = {
         .cluster_id = cluster_id, .node_id_f = node_id,
         .seqno = sent_count++, .residual_mj = residual_mj, .tx_time = clock_time(),
@@ -127,6 +132,7 @@ PROCESS_THREAD(node_process, ev, data)
                cluster_id, node_id, (unsigned long)p.seqno,
                (unsigned long)residual_mj, (unsigned int)sizeof(p));
     } else {
+      LOG_INFO("GEN cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
       LOG_INFO("TXFAIL cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
     }
   }
@@ -154,3 +160,5 @@ PROCESS_THREAD(status_process, ev, data)
   }
   PROCESS_END();
 }
+
+
