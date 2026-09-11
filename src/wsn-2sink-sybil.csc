@@ -584,9 +584,15 @@
     org.contikios.cooja.plugins.ScriptRunner
     <plugin_config>
       <script>var FileWriter = Java.type("java.io.FileWriter");
+var FileReader = Java.type("java.io.FileReader");
+var BufferedReader = Java.type("java.io.BufferedReader");
+var File = Java.type("java.io.File");
 
-// Bắn thẳng file run.log vào thư mục đã có sẵn thông qua đường dẫn Docker
-var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run.log");
+var fileIndex = 1;
+var lineCount = 0;
+var maxLines = 50000;
+var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+var cmdFile = new File("/home/user/defense-project/src/data/logs/attack.cmd");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 
@@ -595,11 +601,42 @@ while (true) {
     try {
         logFile.write(time + " ID:" + id + " " + msg + "\n");
         logFile.flush();
+        lineCount++;
+        
+        if (lineCount &gt;= maxLines) {
+            logFile.close();
+            fileIndex++;
+            lineCount = 0;
+            logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+        }
+        
+        // --- C&amp;C File Bridge Logic ---
+        if (cmdFile.exists()) {
+            var reader = new BufferedReader(new FileReader(cmdFile));
+            var cmd = reader.readLine();
+            reader.close();
+            if (cmd != null &amp;&amp; cmd.length() &gt; 0) {
+                var strCmd = new java.lang.String(cmd);
+                if (strCmd.startsWith("START_VNA") || strCmd.startsWith("STOP_VNA")) {
+                    var m29 = sim.getMoteWithID(29);
+                    if (m29 != null) write(m29, cmd);
+                    var m53 = sim.getMoteWithID(53);
+                    if (m53 != null) write(m53, cmd);
+                } else {
+                    var m53 = sim.getMoteWithID(53);
+                    if (m53 != null) write(m53, cmd);
+                }
+            }
+            cmdFile.delete();
+        }
+        // -----------------------------
+        
     } catch (e) {
         logFile.close();
         throw e;
     }
-}</script>
+}
+</script>
       <active>true</active>
     </plugin_config>
     <bounds x="1" y="1" height="600" width="600" z="2" />
@@ -626,4 +663,13 @@ while (true) {
     </plugin_config>
     <bounds x="405" y="452" height="400" width="400" />
   </plugin>
-</simconf>
+<plugin>
+    org.contikios.cooja.serialsocket.SerialSocketServer
+    <mote_arg>51</mote_arg>
+    <plugin_config>
+      <port>60053</port>
+      <bound>true</bound>
+    </plugin_config>
+    <bounds x="100" y="100" height="116" width="362" z="1" />
+  </plugin>
+  </simconf>

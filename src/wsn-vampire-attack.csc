@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <simconf version="2023090101">
   <simulation>
     <title>wsn-vampire-attack</title>
@@ -573,10 +573,15 @@
     org.contikios.cooja.plugins.ScriptRunner
     <plugin_config>
       <script>var FileWriter = Java.type("java.io.FileWriter");
+var FileReader = Java.type("java.io.FileReader");
+var BufferedReader = Java.type("java.io.BufferedReader");
+var File = Java.type("java.io.File");
+
 var fileIndex = 1;
 var lineCount = 0;
 var maxLines = 50000;
 var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+var cmdFile = new File("/home/user/defense-project/src/data/logs/attack.cmd");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 
@@ -587,16 +592,40 @@ while (true) {
         logFile.flush();
         lineCount++;
         
-        if (lineCount >= maxLines) {
+        if (lineCount &gt;= maxLines) {
             logFile.close();
             fileIndex++;
             lineCount = 0;
             logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
         }
+        
+        // --- C&amp;C File Bridge Logic ---
+        if (cmdFile.exists()) {
+            var reader = new BufferedReader(new FileReader(cmdFile));
+            var cmd = reader.readLine();
+            reader.close();
+            if (cmd != null &amp;&amp; cmd.length() &gt; 0) {
+                var strCmd = new java.lang.String(cmd);
+                if (strCmd.startsWith("START_VNA") || strCmd.startsWith("STOP_VNA")) {
+                    var m29 = sim.getMoteWithID(29);
+                    if (m29 != null) write(m29, cmd);
+                    var m53 = sim.getMoteWithID(53);
+                    if (m53 != null) write(m53, cmd);
+                } else {
+                    var m53 = sim.getMoteWithID(53);
+                    if (m53 != null) write(m53, cmd);
+                }
+            }
+            cmdFile.delete();
+        }
+        // -----------------------------
+        
     } catch (e) {
         logFile.close();
+        throw e;
     }
-}</script>
+}
+</script>
       <active>true</active>
     </plugin_config>
     <bounds x="1" y="1" height="600" width="600" z="2" />

@@ -562,9 +562,15 @@
     org.contikios.cooja.plugins.ScriptRunner
     <plugin_config>
       <script>var FileWriter = Java.type("java.io.FileWriter");
+var FileReader = Java.type("java.io.FileReader");
+var BufferedReader = Java.type("java.io.BufferedReader");
+var File = Java.type("java.io.File");
 
-// Bắn thẳng file run.log vào thư mục đã có sẵn thông qua đường dẫn Docker
-var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run.log");
+var fileIndex = 1;
+var lineCount = 0;
+var maxLines = 50000;
+var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+var cmdFile = new File("/home/user/defense-project/src/data/logs/attack.cmd");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 
@@ -573,11 +579,37 @@ while (true) {
     try {
         logFile.write(time + " ID:" + id + " " + msg + "\n");
         logFile.flush();
+        lineCount++;
+        
+        if (lineCount &gt;= maxLines) {
+            logFile.close();
+            fileIndex++;
+            lineCount = 0;
+            logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+        }
+        
+        // --- C&amp;C File Bridge Logic ---
+        if (cmdFile.exists()) {
+            var reader = new BufferedReader(new FileReader(cmdFile));
+            var cmd = reader.readLine();
+            reader.close();
+            if (cmd != null &amp;&amp; cmd.length() &gt; 0) {
+                // Determine target node (Sybil is 53)
+                var m = sim.getMoteWithID(53);
+                if (m != null) {
+                    write(m, cmd);
+                }
+            }
+            cmdFile.delete();
+        }
+        // -----------------------------
+        
     } catch (e) {
         logFile.close();
         throw e;
     }
-}</script>
+}
+</script>
       <active>true</active>
     </plugin_config>
     <bounds x="1" y="1" height="600" width="600" z="1" />

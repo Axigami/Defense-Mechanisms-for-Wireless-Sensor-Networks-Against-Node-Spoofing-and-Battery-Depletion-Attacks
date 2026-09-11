@@ -50,15 +50,16 @@ if errorlevel 1 (
 )
 
 REM Check for log file
+set LOG_DIR=..\data\logs
 set LOG_FILE=..\data\logs\run.log
 
 echo.
 echo ============================================
-if exist "%LOG_FILE%" (
-    echo Log file found: %LOG_FILE%
+if exist "%LOG_DIR%" (
+    echo Log directory found: %LOG_DIR%
     echo Starting server with log monitoring...
 ) else (
-    echo Log file not found: %LOG_FILE%
+    echo Log directory not found: %LOG_DIR%
     echo Starting server in API-only mode...
     echo You can run Cooja simulation to generate logs later
 )
@@ -71,7 +72,7 @@ echo ============================================
 echo.
 
 REM Start the server (with or without log file)
-if exist "%LOG_FILE%" (
+if exist "%LOG_DIR%" (
     python monitor_server.py "%LOG_FILE%"
 ) else (
     python monitor_server.py

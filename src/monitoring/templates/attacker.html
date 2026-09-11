@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C&C Attacker Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0a0a0f;
+            --bg-panel: #13131a;
+            --accent-red: #ef4444;
+            --accent-red-dim: rgba(239, 68, 68, 0.2);
+            --accent-green: #22c55e;
+            --text-main: #e2e8f0;
+            --text-muted: #64748b;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: var(--accent-red);
+            font-family: 'Fira Code', monospace;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 15px var(--accent-red-dim);
+        }
+
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid #2d2d3d;
+            border-radius: 12px;
+            padding: 30px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        .attack-group {
+            margin-bottom: 30px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #2d2d3d;
+        }
+
+        .attack-group:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .attack-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .btn-start {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .btn-start:hover {
+            background: var(--accent-red);
+            color: #fff;
+            box-shadow: 0 0 20px var(--accent-red-dim);
+        }
+
+        .btn-stop {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .btn-stop:hover {
+            background: var(--accent-green);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+        }
+
+        .status-box {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+            color: var(--text-muted);
+            min-height: 20px;
+        }
+        
+        .success { color: var(--accent-green); }
+        .error { color: var(--accent-red); }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Command & Control Center</h1>
+        <p style="color: var(--text-muted);">WSN Attack Orchestration Dashboard</p>
+    </div>
+
+    <div class="panel">
+        <!-- Sybil Attack -->
+        <div class="attack-group">
+            <div class="attack-title">
+                <span style="color: #f59e0b;">☠</span> Sybil Attack (Node 53)
+            </div>
+            <button class="btn btn-start" onclick="sendCommand('sybil', 'start')">Deploy Sybil Attack</button>
+            <button class="btn btn-stop" onclick="sendCommand('sybil', 'stop')">Halt Sybil Attack</button>
+            <div id="sybil-status" class="status-box">System standing by...</div>
+        </div>
+
+                <!-- VNA Attack -->
+        <div class="attack-group">
+            <div class="attack-title">
+                <span style="color: #a855f7;">s</span> Version Number Attack (VNA)
+            </div>
+            <button class="btn btn-start" onclick="sendCommand('vna', 'start')">Deploy VNA Attack</button>
+            <button class="btn btn-stop" onclick="sendCommand('vna', 'stop')">Halt VNA Attack</button>
+            <div id="vna-status" class="status-box">System standing by...</div>
+        </div>
+    </div>
+
+    <script>
+        async function sendCommand(attackType, action) {
+            const statusBox = document.getElementById(`${attackType}-status`);
+            statusBox.innerHTML = `Executing command [${action.toUpperCase()}]...`;
+            statusBox.className = 'status-box';
+
+            try {
+                const response = await fetch(`/api/${attackType}/${action}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusBox.innerHTML = `> ${data.message}`;
+                    statusBox.classList.add('success');
+                } else {
+                    statusBox.innerHTML = `> Error: ${data.message}`;
+                    statusBox.classList.add('error');
+                }
+            } catch (err) {
+                statusBox.innerHTML = `> Network Error: Could not reach C&C Server`;
+                statusBox.classList.add('error');
+            }
+        }
+    </script>
+</body>
+</html>

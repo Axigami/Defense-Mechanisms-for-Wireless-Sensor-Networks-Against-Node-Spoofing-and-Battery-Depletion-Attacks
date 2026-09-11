@@ -530,19 +530,21 @@ if __name__ == '__main__':
         # Tìm tất cả log files (run.log, run2.log, run3.log...)
         if log_dir.exists():
             import os
+            import glob
             all_logs = glob.glob(os.path.join(log_dir, 'run_*.log'))
             # Cung kiem tra file run.log cu neu co
             all_logs.extend(glob.glob(os.path.join(log_dir, 'run.log')))
             if all_logs:
                 logger.info(f"Found {len(all_logs)} log files in {log_dir}")
-                # Ch? lay file moi nhat de watch
                 latest_log = max(all_logs, key=os.path.getctime)
-                logger.info(f"Starting watcher on latest log: {os.path.basename(latest_log)}")
-                watcher = LogFileWatcher(latest_log)
-                watcher.start()
-                log_files_to_watch.append(latest_log)
             else:
-                logger.warning(f"No log files found in {log_dir}")
+                logger.warning(f"No log files found in {log_dir}. Defaulting to run_1.log")
+                latest_log = os.path.join(log_dir, 'run_1.log')
+                
+            logger.info(f"Starting watcher on: {os.path.basename(latest_log)}")
+            watcher = LogFileWatcher(latest_log)
+            watcher.start()
+            log_files_to_watch.append(latest_log)
         else:
             logger.warning(f"Log directory not found: {log_dir}")
     else:

