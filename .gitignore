@@ -53,7 +53,7 @@ src/data/results/*.csv
 src/data/results/charts/*.png
 src/data/results/charts/*.jpg
 src/data/results/charts/*.pdf
-
+src/data/logs/*.txt
 # Project specific - Build artifacts
 src/nodes/build/
 *.o
