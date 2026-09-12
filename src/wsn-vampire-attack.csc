@@ -49,8 +49,8 @@
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <description>Vampire Attacker</description>
-      <source>[CONFIG_DIR]/nodes/vampire_node.c</source>
-      <commands>make vampire_node.cooja TARGET=cooja</commands>
+      <source>[CONFIG_DIR]/attacks/vampire_attack/vampire_stealth.c</source>
+      <commands>make vampire_stealth.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRS232</moteinterface>
@@ -555,7 +555,7 @@
       <script>var FileWriter = Java.type("java.io.FileWriter");
 
 // Báº¯n tháº³ng file run.log vÃ o thÆ° má»¥c Ä‘Ã£ cÃ³ sáºµn thÃ´ng qua Ä‘Æ°á»ng dáº«n Docker
-var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run.log");
+var logFile = new FileWriter("../data/logs/run.log");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 

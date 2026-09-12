@@ -483,10 +483,14 @@ if __name__ == '__main__':
             if all_logs:
                 logger.info(f"Found {len(all_logs)} log files in {log_dir}")
                 for log in all_logs:
-                    logger.info(f"  - {log.name} ({log.stat().st_size / 1024:.1f} KB)")
+                    file_size_kb = log.stat().st_size / 1024
+                    logger.info(f"  - {log.name} ({file_size_kb:.1f} KB)")
                     watcher = LogFileWatcher(str(log))
                     watcher.start()
                     log_files_to_watch.append(log)
+                
+                # Log số liệu để debug
+                logger.info(f"Started {len(log_files_to_watch)} log file watchers")
             else:
                 logger.warning(f"No log files found in {log_dir}")
         else:

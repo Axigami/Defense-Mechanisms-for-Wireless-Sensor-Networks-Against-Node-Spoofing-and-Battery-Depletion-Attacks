@@ -49,19 +49,41 @@ if errorlevel 1 (
     echo.
 )
 
-REM Check for log file
+REM Find log file - check multiple locations
 set LOG_FILE=..\data\logs\run.log
+set LOG_FILE_ABS=%~dp0..\data\logs\run.log
 
 echo.
 echo ============================================
+echo Searching for log files...
+echo.
+
+REM Check if log file exists
 if exist "%LOG_FILE%" (
-    echo Log file found: %LOG_FILE%
-    echo Starting server with log monitoring...
+    for %%F in ("%LOG_FILE%") do (
+        echo Log file found: %%~fF
+        echo Size: %%~zF bytes
+    )
+    set FOUND_LOG=1
 ) else (
     echo Log file not found: %LOG_FILE%
-    echo Starting server in API-only mode...
-    echo You can run Cooja simulation to generate logs later
+    set FOUND_LOG=0
 )
+
+echo.
+if "%FOUND_LOG%"=="1" (
+    echo Starting server with log monitoring...
+    echo Server will read ALL run*.log files in the logs folder
+) else (
+    echo WARNING: No log file found!
+    echo Starting server in API-only mode...
+    echo.
+    echo To use monitoring:
+    echo   1. Run Cooja simulation
+    echo   2. Ensure log is saved to: %LOG_FILE_ABS%
+    echo   3. Restart this server
+)
+
 echo.
 echo Dashboard will be available at:
 echo   http://localhost:5000
@@ -70,10 +92,12 @@ echo Press CTRL+C to stop the server
 echo ============================================
 echo.
 
-REM Start the server (with or without log file)
-if exist "%LOG_FILE%" (
+REM Start the server
+if "%FOUND_LOG%"=="1" (
+    echo Starting with log file: %LOG_FILE%
     python monitor_server.py "%LOG_FILE%"
 ) else (
+    echo Starting without log file (API-only mode)
     python monitor_server.py
 )
 

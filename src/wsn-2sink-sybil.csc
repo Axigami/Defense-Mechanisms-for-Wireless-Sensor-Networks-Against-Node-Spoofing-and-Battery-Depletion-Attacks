@@ -586,7 +586,7 @@
       <script>var FileWriter = Java.type("java.io.FileWriter");
 
 // Bắn thẳng file run.log vào thư mục đã có sẵn thông qua đường dẫn Docker
-var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run.log");
+var logFile = new FileWriter("../data/logs/run.log");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 
