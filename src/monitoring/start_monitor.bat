@@ -49,25 +49,20 @@ if errorlevel 1 (
     echo.
 )
 
-REM Find log file - check multiple locations
+REM Check for log file
+set LOG_DIR=..\data\logs
 set LOG_FILE=..\data\logs\run.log
 set LOG_FILE_ABS=%~dp0..\data\logs\run.log
 
 echo.
 echo ============================================
-echo Searching for log files...
-echo.
-
-REM Check if log file exists
-if exist "%LOG_FILE%" (
-    for %%F in ("%LOG_FILE%") do (
-        echo Log file found: %%~fF
-        echo Size: %%~zF bytes
-    )
-    set FOUND_LOG=1
+if exist "%LOG_DIR%" (
+    echo Log directory found: %LOG_DIR%
+    echo Starting server with log monitoring...
 ) else (
-    echo Log file not found: %LOG_FILE%
-    set FOUND_LOG=0
+    echo Log directory not found: %LOG_DIR%
+    echo Starting server in API-only mode...
+    echo You can run Cooja simulation to generate logs later
 )
 
 echo.
@@ -92,9 +87,8 @@ echo Press CTRL+C to stop the server
 echo ============================================
 echo.
 
-REM Start the server
-if "%FOUND_LOG%"=="1" (
-    echo Starting with log file: %LOG_FILE%
+REM Start the server (with or without log file)
+if exist "%LOG_DIR%" (
     python monitor_server.py "%LOG_FILE%"
 ) else (
     echo Starting without log file (API-only mode)

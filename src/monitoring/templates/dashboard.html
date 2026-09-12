@@ -75,7 +75,7 @@
         /* Charts & Logs Layout */
         .main-layout {
             display: grid;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: 1fr;
             gap: 20px;
         }
 
@@ -181,15 +181,7 @@
                 </div>
             </div>
 
-            <div class="glass-panel">
-                <div class="panel-title" style="color: var(--accent-yellow);">
-                    <span>⚠️ Security Events Log</span>
-                    <span style="font-size: 0.8em; color: var(--text-muted);">VNA / Sybil</span>
-                </div>
-                <div class="log-box" id="attackLogs">
-                    <div style="color: var(--text-muted); text-align: center; margin-top: 50px;">Listening for attacks...</div>
-                </div>
-            </div>
+            
         </div>
 
         <!-- Node List -->
@@ -257,6 +249,13 @@
                         borderColor: '#3b82f6',
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
                         borderWidth: 2, tension: 0.3, yAxisID: 'y1'
+                    },
+                    {
+                        label: 'Energy Drain (mJ/s)',
+                        data: [],
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.3)',
+                        borderWidth: 3, tension: 0.3, yAxisID: 'y2', fill: true
                     }
                 ]
             },
@@ -276,13 +275,21 @@
                         title: { display: true, text: 'Temp / Latency' },
                         grid: { drawOnChartArea: false }
                     },
+                    y2: {
+                        type: 'linear', display: true, position: 'right',
+                        title: { display: true, text: 'Drain (mJ/s)' },
+                        grid: { drawOnChartArea: false },
+                        min: 0
+                    },
                     x: { grid: { display: false } }
                 }
             }
         });
 
         let allNodesData = [];
-        let displayedVnaEventsCount = 0;
+        let lastAvgEnergy = null;
+        let lastTimeMs = null;
+        
         let sortColumn = 'node_id';
         let sortAscending = true;
 
@@ -341,6 +348,20 @@
                 document.getElementById('avgTemp').textContent = avgTemp.toFixed(1);
                 document.getElementById('avgLatency').textContent = Math.round(avgLat);
 
+                // Calculate Drain Rate
+                let currentAvgEnergy = avgEnergy;
+                let currentTimeMs = Date.now();
+                let drainRate = 0;
+                if (lastAvgEnergy !== null && lastTimeMs !== null) {
+                    let dt = (currentTimeMs - lastTimeMs) / 1000;
+                    if (dt > 0) {
+                        drainRate = (lastAvgEnergy - currentAvgEnergy) / dt;
+                        if (drainRate < 0) drainRate = 0; // Filter out jumps when nodes join/leave
+                    }
+                }
+                lastAvgEnergy = currentAvgEnergy;
+                lastTimeMs = currentTimeMs;
+
                 // Update Chart
                 if (aliveNodes.length > 0) {
                     const nowStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -348,6 +369,7 @@
                     metricsChart.data.datasets[0].data.push(avgEnergy);
                     metricsChart.data.datasets[1].data.push(avgTemp);
                     metricsChart.data.datasets[2].data.push(avgLat);
+                    metricsChart.data.datasets[3].data.push(drainRate);
 
                     if (metricsChart.data.labels.length > 30) {
                         metricsChart.data.labels.shift();
@@ -356,25 +378,7 @@
                     metricsChart.update('none');
                 }
 
-                // Update Attack Logs
-                if (data.vna_events && data.vna_events.length > displayedVnaEventsCount) {
-                    const logBox = document.getElementById('attackLogs');
-                    if (displayedVnaEventsCount === 0) logBox.innerHTML = '';
-
-                    for (let i = displayedVnaEventsCount; i < data.vna_events.length; i++) {
-                        const ev = data.vna_events[i];
-                        const div = document.createElement('div');
-                        div.className = 'log-entry';
-                        div.innerHTML = `
-                            <span class="log-time">[${formatTime(ev.timestamp)}]</span>
-                            <span class="log-vna">Vampire Attack Triggered by Node ${ev.node_id}!</span>
-                            <span class="log-vna-detail">DODAG Version spiked: ${ev.old_version} ➔ <span style="color:#ef4444">${ev.new_version}</span></span>
-                        `;
-                        logBox.prepend(div);
-                    }
-                    displayedVnaEventsCount = data.vna_events.length;
-                }
-
+                 
                 // Fire Alerts
                 const currentFireAlerts = data.fire_alerts || [];
                 const fireAlertBanner = document.getElementById('fireAlertBanner');
@@ -443,7 +447,7 @@
         
         // Initializing
         updateSortIcons();
-        setInterval(updateDashboard, 2000);
+        setInterval(updateDashboard, 1000);
         updateDashboard();
     </script>
 </body>

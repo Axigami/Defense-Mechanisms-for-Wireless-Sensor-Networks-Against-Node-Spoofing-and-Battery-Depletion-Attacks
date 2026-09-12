@@ -20,6 +20,7 @@ import re
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 # Flask app
 app = Flask(__name__)
@@ -36,7 +37,8 @@ network_data = {
     'nodes': {},  # {node_id: {cluster, seq, energy, temp, latency, last_seen}}
     'history': deque(maxlen=1000),  # Lưu lịch sử để vẽ charts
     'fire_alerts': {}, # {node_id: timestamp}
-    'vna_events': deque(maxlen=50), # {timestamp, node_id, old_version, new_version}
+    'vna_events': deque(maxlen=50),
+    'sybil_events': set(), # {timestamp, node_id, old_version, new_version}
     'cluster_stats': {
         1: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0},
         2: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0}
@@ -48,15 +50,16 @@ LOG_PATTERNS = {
     'rx': re.compile(r'RX sink=(?P<sink>\d+) cluster=(?P<cl>\d+) node=(?P<node>\d+) '
                      r'seq=(?P<seq>\d+) energy_mj=(?P<e>\d+) temp_c=(?P<temp_int>\d+)\.(?P<temp_dec>\d+) '
                      r'bytes=\d+ latency_ms=(?P<lat>\d+)'),
-    'tx': re.compile(r'(TX cluster=|NORMAL_TX|ATTACK_TX)'),
+    'tx': re.compile(r'(TX cluster=|TXFAIL|NORMAL_TX|ATTACK_TX)'),
     'dead': re.compile(r'DEAD cluster=(?P<cl>\d+) node=(?P<node>\d+) time_alive_s=(?P<alive>\d+)'),
     'sink_start': re.compile(r'SINK_START sink=(?P<sink>\d+) version=(?P<ver>\d+_\d+)'),
     'version': re.compile(r'VERSION_UPDATE sink=(?P<sink>\d+) old_version=(?P<old>\d+_\d+) '
                           r'new_version=(?P<new>\d+_\d+)'),
     'health': re.compile(r'HEALTH sink=(?P<sink>\d+) active_routes=(?P<routes>\d+) '
                          r'version=(?P<ver>\d+_\d+)'),
-    'vna': re.compile(r'ID:(?P<node>\d+).*ATTACK_VNA: Triggered! Version changed (?P<old>\d+) -> (?P<new>\d+)'),
+    'vna': re.compile(r'ID:(?P<node>\d+).*ATTACK_VNA.*: Triggered! Version changed (?P<old>\d+) -> (?P<new>\d+)'),
     'parent_switch': re.compile(r'ID:(?P<node>\d+).*parent switch:'),
+    'status': re.compile(r'STATUS node=(?P<node>\d+) energy_mj=(?P<e>\d+)'),
 }
 
 
@@ -123,6 +126,11 @@ class CoAPDataResource(resource.Resource):
                 elif node_id in network_data['fire_alerts']:
                     del network_data['fire_alerts'][node_id]
                 
+                if node_id >= 100:
+                    if 'sybil_events' not in network_data:
+                        network_data['sybil_events'] = set()
+                    network_data['sybil_events'].add(node_id)
+                
                 network_data['total_packets_received'] += 1
                 
                 # Add to history
@@ -155,7 +163,16 @@ class CoAPDataResource(resource.Resource):
                 network_data['version'] = m.group('ver')
                 network_data['sink_id'] = int(m.group('sink'))
             
-            # Parse DEAD messages
+            # Parse STATUS
+        m = LOG_PATTERNS['status'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            energy = int(m.group('e'))
+            if node_id in network_data['nodes']:
+                network_data['nodes'][node_id]['energy_mj'] = energy
+                network_data['nodes'][node_id]['last_seen'] = timestamp
+
+        # Parse DEAD messages
             m = LOG_PATTERNS['dead'].search(line)
             if m:
                 node_id = int(m.group('node'))
@@ -183,33 +200,56 @@ class LogFileWatcher(threading.Thread):
         self.running = True
     
     def run(self):
-        """Đọc log file và parse real-time"""
-        logger.info(f"Watching log file: {self.log_file_path}")
+        """Doc log file va parse real-time, ho tro log rotation"""
+        import time
+        import glob
+        import os
         
-        try:
-            with open(self.log_file_path, 'r') as f:
-                # ĐỌC TOÀN BỘ FILE TỪ ĐẦU (không skip đến cuối)
-                logger.info("Reading existing log data...")
-                line_count = 0
-                for line in f:
-                    self.process_line(line)
-                    line_count += 1
-                
-                logger.info(f"Processed {line_count} existing log lines")
-                
-                # Sau đó theo dõi log mới
-                while self.running:
-                    line = f.readline()
-                    if line:
+        while self.running:
+            logger.info(f"Watching log file: {self.log_file_path}")
+            try:
+                with open(self.log_file_path, 'r') as f:
+                    logger.info("Reading existing log data...")
+                    line_count = 0
+                    for line in f:
                         self.process_line(line)
-                    else:
-                        # Chờ 1 giây nếu không có dữ liệu mới
-                        threading.Event().wait(1)
-        
-        except FileNotFoundError:
-            logger.error(f"Log file not found: {self.log_file_path}")
-        except Exception as e:
-            logger.error(f"Error watching log file: {e}")
+                        line_count += 1
+                    
+                    logger.info(f"Processed {line_count} existing log lines")
+                    
+                    last_report = time.time()
+                    lines_parsed = 0
+                    while self.running:
+                        line = f.readline()
+                        if line:
+                            self.process_line(line)
+                            lines_parsed += 1
+                        else:
+                            # Check for new log file (log rotation)
+                            try:
+                                log_dir = os.path.dirname(self.log_file_path)
+                                all_logs = glob.glob(os.path.join(log_dir, 'run_*.log'))
+                                if all_logs:
+                                    latest_file = max(all_logs, key=os.path.getctime)
+                                    if latest_file != self.log_file_path:
+                                        logger.info(f"Log rotated! Switching to new file: {latest_file}")
+                                        self.log_file_path = latest_file
+                                        break # Break to reopen new file
+                            except Exception:
+                                pass
+                            threading.Event().wait(1)
+                            
+                        if time.time() - last_report > 10:
+                            if lines_parsed > 0:
+                                logger.info(f"Parsed {lines_parsed} log lines in the last 10 seconds.")
+                                lines_parsed = 0
+                            last_report = time.time()
+            except FileNotFoundError:
+                logger.error(f"Log file not found: {self.log_file_path}")
+                threading.Event().wait(2)
+            except Exception as e:
+                logger.error(f"Error watching log file: {e}")
+                threading.Event().wait(2)
     
     def process_line(self, line):
         """Process một dòng log"""
@@ -295,6 +335,15 @@ class LogFileWatcher(threading.Thread):
                     network_data['cluster_stats'][cluster]['parent_switches'] += 1
             return
         
+        # Parse STATUS
+        m = LOG_PATTERNS['status'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            energy = int(m.group('e'))
+            if node_id in network_data['nodes']:
+                network_data['nodes'][node_id]['energy_mj'] = energy
+                network_data['nodes'][node_id]['last_seen'] = timestamp
+
         # Parse DEAD messages (node ran out of energy)
         m = LOG_PATTERNS['dead'].search(line)
         if m:
@@ -387,6 +436,7 @@ def get_network_data():
             2: {'avg_energy': avg_energy_c2, 'parent_switches': network_data['cluster_stats'][2]['parent_switches']}
         },
         'vna_events': list(network_data['vna_events']),
+        'sybil_events': list(network_data.get('sybil_events', set())),
         'nodes': [
             {
                 'node_id': node_id,
@@ -479,20 +529,22 @@ if __name__ == '__main__':
         
         # Tìm tất cả log files (run.log, run2.log, run3.log...)
         if log_dir.exists():
-            all_logs = sorted(log_dir.glob('run*.log'))
+            import os
+            import glob
+            all_logs = glob.glob(os.path.join(log_dir, 'run_*.log'))
+            # Cung kiem tra file run.log cu neu co
+            all_logs.extend(glob.glob(os.path.join(log_dir, 'run.log')))
             if all_logs:
                 logger.info(f"Found {len(all_logs)} log files in {log_dir}")
-                for log in all_logs:
-                    file_size_kb = log.stat().st_size / 1024
-                    logger.info(f"  - {log.name} ({file_size_kb:.1f} KB)")
-                    watcher = LogFileWatcher(str(log))
-                    watcher.start()
-                    log_files_to_watch.append(log)
-                
-                # Log số liệu để debug
-                logger.info(f"Started {len(log_files_to_watch)} log file watchers")
+                latest_log = max(all_logs, key=os.path.getctime)
             else:
-                logger.warning(f"No log files found in {log_dir}")
+                logger.warning(f"No log files found in {log_dir}. Defaulting to run_1.log")
+                latest_log = os.path.join(log_dir, 'run_1.log')
+                
+            logger.info(f"Starting watcher on: {os.path.basename(latest_log)}")
+            watcher = LogFileWatcher(latest_log)
+            watcher.start()
+            log_files_to_watch.append(latest_log)
         else:
             logger.warning(f"Log directory not found: {log_dir}")
     else:
@@ -512,3 +564,4 @@ if __name__ == '__main__':
     
     # Start Flask app
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+
