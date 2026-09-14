@@ -47,26 +47,98 @@ htmlcov/
 *~
 .DS_Store
 
-# Project specific - Data files
-src/data/logs/*.csv
-src/data/results/*.csv
+# ========================================
+# PROJECT SPECIFIC
+# ========================================
+
+# Log files (Cooja simulation logs)
+*.log
+src/data/logs/*.log
+src/data/logs/run*.log
+
+# Data files (features, training data)
+*.csv
+!**/README.md
+src/ml/*.csv
+src/data/**/*.csv
+
+# ML models
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.pth
+src/ml/*.pkl
+src/ml/*.joblib
+src/ml/model_*.joblib
+src/ml/vampire_detector_model*.pkl
+
+# Charts and visualizations
+*.png
+*.jpg
+*.jpeg
+*.pdf
 src/data/results/charts/*.png
 src/data/results/charts/*.jpg
 src/data/results/charts/*.pdf
-src/data/logs/*.txt
-# Project specific - Build artifacts
-src/nodes/build/
+
+# Contiki-NG build artifacts
 *.o
 *.elf
 *.hex
 *.bin
 *.map
+*.a
+*.cooja
+*.sky
+*.z1
+*.cc2538dk
+*.openmote
+*.zoul
+*.nrf52dk
+symbols.c
+symbols.h
+obj_*/
+build_*/
+*.firmwarecore
+*.ihex
 
-# Keep directory structure
+# Contiki-NG specific folders
+src/nodes/obj_*/
+src/nodes/build/
+src/attacks/vampire_attack/obj_*/
+src/attacks/vampire_attack/*.cooja
+src/attacks/vampire_attack/*.sky
+
+# Cooja temporary files
+*.testlog
+*.scriptlog
+COOJA.log
+
+# Generated C code from ML
+src/defense/vampire_detector.h
+src/defense/*.generated.c
+src/defense/*.generated.h
+
+# Backup files
+*.bak
+*.backup
+*~
+*.tmp
+
+# OS specific
+Thumbs.db
+desktop.ini
+
+# ========================================
+# KEEP DIRECTORY STRUCTURE
+# ========================================
+!.gitkeep
 !src/data/logs/.gitkeep
 !src/data/results/.gitkeep
 !src/data/results/charts/.gitkeep
 !src/attacks/.gitkeep
 !src/defense/.gitkeep
+!src/ml/.gitkeep
 
 

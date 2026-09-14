@@ -580,8 +580,8 @@ var File = Java.type("java.io.File");
 var fileIndex = 1;
 var lineCount = 0;
 var maxLines = 50000;
-var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
-var cmdFile = new File("/home/user/defense-project/src/data/logs/attack.cmd");
+var logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
+var cmdFile = new File("../../../data/logs/attack.cmd");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 
@@ -596,7 +596,7 @@ while (true) {
             logFile.close();
             fileIndex++;
             lineCount = 0;
-            logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+            logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
         }
         
         // --- C&amp;C File Bridge Logic ---
