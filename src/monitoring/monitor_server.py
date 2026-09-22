@@ -6,6 +6,11 @@ Nhận dữ liệu từ Sink qua CoAP và serve dashboard qua HTTP
 
 import asyncio
 import json
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'defense')))
+from defense import DefenseSystem
+defense_sys = DefenseSystem()
 import logging
 import time
 from datetime import datetime
@@ -16,6 +21,28 @@ import aiocoap
 import aiocoap.resource as resource
 import threading
 import re
+
+
+import random
+
+simulated_rssi_baselines = {}
+
+def get_realistic_rssi(node_id):
+    if node_id >= 100:
+        # Kẻ tấn công tạo hàng loạt Sybil ID từ cùng 1 ăng ten (cùng RSSI)
+        if 'attacker' not in simulated_rssi_baselines:
+            simulated_rssi_baselines['attacker'] = random.uniform(-65, -45)
+        base = simulated_rssi_baselines['attacker']
+    else:
+        # Node Legit có vị trí vật lý riêng biệt
+        if node_id not in simulated_rssi_baselines:
+            simulated_rssi_baselines[node_id] = random.uniform(-85, -45)
+        base = simulated_rssi_baselines[node_id]
+        
+    # Bơm nhiễu chuẩn Gaussian (Jitter)
+    noise = random.gauss(0, 1.0)
+    return round(base + noise, 1)
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -267,10 +294,12 @@ class LogFileWatcher(threading.Thread):
             # Parse và validate latency (cap tại 10000ms để tránh giá trị lỗi)
             latency_raw = int(m.group('lat'))
             latency = min(latency_raw, 10000)  # Max 10 giây
+            rssi = get_realistic_rssi(node_id)
             
             if latency_raw > 10000:
                 logger.warning(f"Abnormal latency detected: {latency_raw}ms (capped to 10000ms)")
             
+            # 1. ALWAYS REGISTER NODE TO DASHBOARD FIRST (kể cả giả mạo)
             if node_id not in network_data['nodes']:
                 network_data['nodes'][node_id] = {
                     'cluster': cluster,
@@ -280,23 +309,36 @@ class LogFileWatcher(threading.Thread):
                     'latency_ms': latency,
                     'last_seen': timestamp,
                     'packets_received': 1,
-                    'is_alive': True,  # Node is alive when sending data
+                    'is_alive': True,
                 }
                 logger.info(f"New node detected: {node_id}")
-            else:
-                network_data['nodes'][node_id].update({
-                    'seq': seq,
-                    'energy_mj': energy,
-                    'temp_c': temp,
-                    'latency_ms': latency,
-                    'last_seen': timestamp,
-                    'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
-                })
+            
+            # 2. RUN DEFENSE SYSTEM
+            passed = defense_sys.process_packet(node_id, rssi, temp)
+            network_data['defense_data'] = defense_sys.get_ui_data()
+            
+            if not passed:
+                return # DROP PACKET - Ngừng cập nhật trạng thái
+                
+            # 3. IF PASSED, UPDATE NODE STATS
+            network_data['nodes'][node_id].update({
+                'seq': seq,
+                'energy_mj': energy,
+                'temp_c': temp,
+                'latency_ms': latency,
+                'last_seen': timestamp,
+                'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
+            })
             
             if temp > 60.0:
                 network_data['fire_alerts'][node_id] = timestamp
             elif node_id in network_data['fire_alerts']:
                 del network_data['fire_alerts'][node_id]
+                
+            if node_id >= 100:
+                if 'sybil_events' not in network_data:
+                    network_data['sybil_events'] = set()
+                network_data['sybil_events'].add(node_id)
             
             network_data['total_packets_received'] += 1
             network_data['history'].append({
@@ -393,6 +435,78 @@ class LogFileWatcher(threading.Thread):
 
 # ============ Flask Routes ============
 
+
+# ==========================================
+# VIRTUAL NODE SIMULATION API
+# ==========================================
+def fake_node_loop(node_id):
+    # Determine base RSSI for legit node (random)
+    rssi_base = random.uniform(-85, -45)
+    simulated_rssi_baselines[node_id] = rssi_base
+    
+    seq = 0
+    energy = 30000
+    
+    while True:
+        # Check if node was blacklisted
+        defense_data = defense_sys.get_ui_data()
+        if node_id in defense_data.get('trust_db', {}):
+            if defense_data['trust_db'][node_id].get('blacklisted', False):
+                logger.info(f"Fake Node {node_id} was blacklisted. Stopping simulation.")
+                break
+                
+        time.sleep(2.0)
+        seq += 1
+        energy -= random.randint(10, 50)
+        if energy <= 0:
+            break
+            
+        temp = round(random.uniform(25.0, 30.0), 1)
+        rssi = round(rssi_base + random.gauss(0, 1.0), 1)
+        
+        passed = defense_sys.process_packet(node_id, rssi, temp)
+        timestamp = datetime.now().timestamp()
+        
+        if node_id not in network_data['nodes']:
+            network_data['nodes'][node_id] = {
+                'cluster': 1,
+                'seq': seq,
+                'energy_mj': energy,
+                'temp_c': temp,
+                'latency_ms': 50,
+                'packets_received': 1,
+                'is_alive': True,
+                'last_seen': timestamp
+            }
+        else:
+            network_data['nodes'][node_id].update({
+                'seq': seq,
+                'energy_mj': energy,
+                'temp_c': temp,
+                'latency_ms': 50,
+                'packets_received': network_data['nodes'][node_id].get('packets_received', 0) + 1,
+                'is_alive': True,
+                'last_seen': timestamp
+            })
+            
+        network_data['total_packets_received'] += 1
+        network_data['history'].append({
+            'timestamp': timestamp,
+            'node_id': node_id,
+            'energy_mj': energy,
+            'temp_c': temp,
+            'rssi': rssi
+        })
+
+from flask import request
+
+@app.route('/api/spawn_node', methods=['POST'])
+def spawn_node():
+    node_id = random.randint(500, 999) # Spawn legit node with ID 500-999
+    threading.Thread(target=fake_node_loop, args=(node_id,), daemon=True).start()
+    logger.info(f"SPAWNED Virtual Legit Node {node_id}")
+    return jsonify({"status": "success", "node_id": node_id})
+
 @app.route('/')
 def index():
     """Serve dashboard"""
@@ -410,7 +524,9 @@ def get_network_data():
             del network_data['fire_alerts'][n]
 
     # Đếm số node còn sống (is_alive=True)
-    active_nodes_count = sum(1 for node in network_data['nodes'].values() if node.get('is_alive', True))
+    defense_data = defense_sys.get_ui_data()
+    blacklisted_nodes = {int(k) for k, v in defense_data.get('trust_db', {}).items() if v.get('blacklisted', False)}
+    active_nodes_count = sum(1 for node_id, node in network_data['nodes'].items() if node.get('is_alive', True) and node_id not in blacklisted_nodes)
     
     # Tách dữ liệu energy theo cluster
     c1_nodes = [n for n in network_data['nodes'].values() if n.get('is_alive', True) and n['cluster'] == 1]
@@ -436,6 +552,7 @@ def get_network_data():
             2: {'avg_energy': avg_energy_c2, 'parent_switches': network_data['cluster_stats'][2]['parent_switches']}
         },
         'vna_events': list(network_data['vna_events']),
+        'defense_data': network_data.get('defense_data', {'is_armed': False, 'logs': [], 'trust_db': {}}),
         'sybil_events': list(network_data.get('sybil_events', set())),
         'nodes': [
             {

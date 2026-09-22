@@ -7,6 +7,7 @@
 #include "sys/node-id.h"
 #include "sys/log.h"
 #include "lib/random.h"
+#include "net/packetbuf.h"
 
 #define LOG_MODULE "SINK"
 #define LOG_LEVEL LOG_LEVEL_INFO
@@ -56,11 +57,12 @@ rx_callback(struct simple_udp_connection *c,
   if (estimated_latency_ms < 10) estimated_latency_ms = 10;
   
   /* Dòng RX bao gồm thông tin nhiệt độ */
-  LOG_INFO("RX sink=%u cluster=%u node=%u seq=%lu energy_mj=%lu temp_c=%d.%d bytes=%u latency_ms=%lu\n",
+  int16_t rssi = packetbuf_attr(PACKETBUF_ATTR_RSSI);
+  LOG_INFO("RX sink=%u cluster=%u node=%u seq=%lu energy_mj=%lu temp_c=%d.%d bytes=%u latency_ms=%lu rssi=%d\n",
            node_id, p->cluster_id, p->node_id_f,
            (unsigned long)p->seqno, (unsigned long)p->residual_mj,
            p->temperature_c / 10, p->temperature_c % 10,
-           datalen, (unsigned long)estimated_latency_ms);
+           datalen, (unsigned long)estimated_latency_ms, rssi);
 }
 
 PROCESS(sink_process, "Sink node");

@@ -18,7 +18,7 @@
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <description>Sink</description>
-      <source>[CONFIG_DIR]/nodes/sink.c</source>
+      <source>[CONFIG_DIR]/../nodes/sink.c</source>
       <commands>make sink.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
@@ -49,7 +49,7 @@
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <description>Vampire Attacker</description>
-      <source>[CONFIG_DIR]/nodes/vampire_node.c</source>
+      <source>[CONFIG_DIR]/../nodes/vampire_node.c</source>
       <commands>make vampire_node.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
@@ -80,7 +80,7 @@
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <description>Sensor node</description>
-      <source>[CONFIG_DIR]/nodes/node.c</source>
+      <source>[CONFIG_DIR]/../nodes/node.c</source>
       <commands>make node.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
@@ -580,8 +580,8 @@ var File = Java.type("java.io.File");
 var fileIndex = 1;
 var lineCount = 0;
 var maxLines = 50000;
-var logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
-var cmdFile = new File("/home/user/defense-project/src/data/logs/attack.cmd");
+var logFile = new FileWriter("E:/Projects/Projects/WSN_dacntt/wsn_dacntt/src/data/logs/run_" + fileIndex + ".log", false);
+var cmdFile = new File("E:/Projects/Projects/WSN_dacntt/wsn_dacntt/src/data/logs/attack.cmd");
 
 TIMEOUT(3600000, logFile.close(); log.testOK(););
 
@@ -596,7 +596,7 @@ while (true) {
             logFile.close();
             fileIndex++;
             lineCount = 0;
-            logFile = new FileWriter("/home/user/defense-project/src/data/logs/run_" + fileIndex + ".log", false);
+            logFile = new FileWriter("E:/Projects/Projects/WSN_dacntt/wsn_dacntt/src/data/logs/run_" + fileIndex + ".log", false);
         }
         
         // --- C&amp;C File Bridge Logic ---
