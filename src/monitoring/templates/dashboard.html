@@ -213,30 +213,98 @@
             100% { transform: scale(1); opacity: 1; }
         }
 
+
+        /* Inference Engine Styles */
+        .inf-feed-container { height: 280px; overflow-y: auto; padding-right: 5px; }
+        .inf-entry { background: rgba(0,0,0,0.2); border-left: 4px solid white; margin-bottom: 12px; padding: 12px; border-radius: 0 8px 8px 0; transition: transform 0.2s; }
+        .inf-entry:hover { transform: translateX(5px); background: rgba(255,255,255,0.05); }
+        .inf-header { display: flex; justify-content: flex-start; align-items: center; gap: 10px; margin-bottom: 8px; font-weight: 700; font-size: 0.9em; }
+        .inf-time { color: var(--text-muted); font-family: monospace; }
+        .inf-title { font-size: 1.1em; text-transform: uppercase; letter-spacing: 0.05em; }
+        .inf-body { color: var(--text-main); font-size: 0.95em; line-height: 1.5; }
+        .inf-badge { display: inline-block; background: var(--accent-red); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; margin-left: 10px; font-weight: bold; animation: pulse-red 1.5s infinite; }
+        .zone-badge { display: inline-block; background: rgba(239, 68, 68, 0.2); border: 1px solid var(--accent-red); color: #fca5a5; padding: 6px 12px; border-radius: 8px; margin: 4px; font-family: monospace; font-weight: bold; font-size: 0.9em; }
     </style>
 </head>
 
 <body>
     <div class="container">
+        
         <h1>WSN Advanced Command Center</h1>
+
 
         <!-- ALERTS -->
         <div id="fireAlertBanner" class="alert-banner fire-alert">
             <i class="fas fa-fire-alt"></i> CRITICAL TEMPERATURE ALERT: Nodes <span id="fireAlertNodes"></span> <i class="fas fa-fire-alt"></i>
         </div>
 
-        <div id="defenseBanner" class="glass-panel" style="padding: 18px 24px; margin-bottom: 25px; border-left: 5px solid #f59e0b; display: flex; justify-content: space-between; align-items: center; animation-delay: 0s;">
-            <div style="flex: 1;">
-                <h3 id="defenseStatusText" style="margin: 0; font-size: 1.25em; color: #f59e0b; display: flex; align-items: center; gap: 10px;">
-                    <i class="fas fa-spinner fa-spin"></i> DEFENSE SYSTEM: CONNECTING...
-                </h3>
-                <div id="defenseLogs" style="margin-top: 12px; font-family: 'Consolas', monospace; font-size: 0.95em; height: 60px; overflow-y: auto; color: var(--text-muted); line-height: 1.4;">
-                    Waiting for defense module...
-                </div>
+        <!-- DEFENSE COMMAND CENTER -->
+        <div class="glass-panel" style="margin-bottom: 25px;">
+            <div class="panel-title" style="margin-bottom: 15px;">
+                <span><i class="fas fa-shield-alt" style="color: var(--accent-blue); margin-right: 10px;"></i> Defense Command Center (IDS)</span>
+                <div id="defenseTimer" style="font-family: monospace; font-size: 1.2em; color: var(--text-muted);">--</div>
             </div>
-            <div style="text-align: right; padding-left: 20px; border-left: 1px solid rgba(255,255,255,0.1);">
-                <div style="font-size: 0.85em; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Status</div>
-                <div id="defenseTimer" style="font-size: 1.8em; font-weight: 800; font-family: monospace; color: var(--text-main); margin-top: 5px;">--</div>
+            
+            <div style="display: grid; grid-template-columns: 350px 1fr; gap: 20px;">
+                
+                <!-- Left Stats -->
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <!-- Status -->
+                    <div id="defStatusBox" style="background: rgba(245,158,11,0.1); border: 2px solid #f59e0b; border-radius: 12px; padding: 15px; text-align: center;">
+                        <h2 id="defStatusText" style="color: #f59e0b; font-size: 1.5em; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                            <i class="fas fa-spinner fa-spin"></i> LEARNING...
+                        </h2>
+                        <div id="defProgressBar" style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-top: 10px; overflow: hidden;">
+                            <div id="defProgressFill" style="width: 0%; height: 100%; background: #f59e0b; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Nodes Trust Overview -->
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 15px;">
+                        <div style="font-size: 0.85em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; font-weight: bold;">Network Trust Overview</div>
+                        <div style="display: flex; justify-content: space-between; text-align: center;">
+                            <div>
+                                <div id="statSafe" style="font-size: 1.8em; font-weight: 800; color: var(--accent-green);">0</div>
+                                <div style="font-size: 0.75em; color: var(--text-muted);">SAFE</div>
+                            </div>
+                            <div>
+                                <div id="statWarn" style="font-size: 1.8em; font-weight: 800; color: #f59e0b;">0</div>
+                                <div style="font-size: 0.75em; color: var(--text-muted);">WARNING</div>
+                            </div>
+                            <div>
+                                <div id="statBlocked" style="font-size: 1.8em; font-weight: 800; color: var(--accent-red);">0</div>
+                                <div style="font-size: 0.75em; color: var(--text-muted);">BLOCKED</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Blocked Zones -->
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 15px; flex: 1;">
+                        <div style="font-size: 0.85em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; font-weight: bold;"><i class="fas fa-ban" style="color: var(--accent-red);"></i> Blocked RSSI Zones</div>
+                        <div id="blockedZonesContainer" style="max-height: 150px; overflow-y: auto; padding-right: 5px;">
+                            <span style="color: var(--text-muted); font-size: 0.9em;">No zones blocked yet.</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right Feed -->
+                <div style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 15px; display: flex; flex-direction: column;">
+                    <div style="font-size: 0.85em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 15px; font-weight: bold; display: flex; justify-content: space-between;">
+                        <span><i class="fas fa-search-location"></i> Live Threat Inference Feed</span>
+                        <span style="display:flex; gap:15px;">
+                            <span style="color: #f59e0b;"><i class="fas fa-user-secret"></i> Spoof: <span id="cntSpoof">0</span></span>
+                            <span style="color: #8b5cf6;"><i class="fas fa-random"></i> Bipolar: <span id="cntBipolar">0</span></span>
+                            <span style="color: #ea580c;"><i class="fas fa-fire-extinguisher"></i> FDI: <span id="cntFDI">0</span></span>
+                        </span>
+                    </div>
+                    <div id="inferenceFeed" class="inf-feed-container">
+                        <div style="text-align: center; color: var(--text-muted); margin-top: 50px;">
+                            <i class="fas fa-satellite-dish fa-spin" style="font-size: 2em; margin-bottom: 10px;"></i><br>
+                            Listening for malicious activity...
+                        </div>
+                    </div>
+                </div>
+                
             </div>
         </div>
 
@@ -543,27 +611,55 @@
                     globalDefenseData = data.defense_data;
                     
                     
-                    const banner = document.getElementById('defenseBanner');
-                    const statusText = document.getElementById('defenseStatusText');
+                    const statBox = document.getElementById('defStatusBox');
+                    const statusText = document.getElementById('defStatusText');
                     const timer = document.getElementById('defenseTimer');
+                    const progFill = document.getElementById('defProgressFill');
                     
                     if (globalDefenseData.is_armed) {
-                        banner.style.background = 'rgba(239, 68, 68, 0.1)';
-                        banner.style.borderLeftColor = 'var(--accent-red)';
+                        statBox.style.background = 'rgba(239, 68, 68, 0.1)';
+                        statBox.style.borderColor = 'var(--accent-red)';
                         statusText.style.color = 'var(--accent-red)';
-                        statusText.innerHTML = '<i class="fas fa-shield-alt"></i> DEFENSE SYSTEM: ARMED (Intrusion Detection Active)';
-                        timer.textContent = 'ONLINE';
+                        statusText.innerHTML = '<i class="fas fa-shield-alt"></i> ARMED';
+                        timer.textContent = 'SYSTEM ONLINE';
+                        progFill.style.width = '100%';
+                        progFill.style.background = 'var(--accent-red)';
                     } else {
-                        banner.style.background = 'rgba(245, 158, 11, 0.2)';
-                        banner.style.borderLeftColor = '#f59e0b';
+                        statBox.style.background = 'rgba(245, 158, 11, 0.1)';
+                        statBox.style.borderColor = '#f59e0b';
                         statusText.style.color = '#f59e0b';
-                        statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> DEFENSE SYSTEM: LEARNING NETWORK BASELINE...';
+                        statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> LEARNING...';
                         let pkts_done = globalDefenseData.learning_pkts_total - globalDefenseData.learning_pkts_left;
-                        timer.textContent = `${pkts_done} / ${globalDefenseData.learning_pkts_total} pkts`;
+                        let pct = (pkts_done / globalDefenseData.learning_pkts_total) * 100;
+                        progFill.style.width = `${pct}%`;
+                        timer.textContent = `${pkts_done}/${globalDefenseData.learning_pkts_total} pkts`;
                     }
 
-                    let logsHtml = globalDefenseData.logs.map(l => { return l.includes("BLACKLISTED") ? `<span style="color:var(--accent-red)">${l}</span><br>` : (l.includes("Warning") ? `<span style="color:#f59e0b">${l}</span><br>` : `<span>${l}</span><br>`); }).join("");
-                    if(logsHtml) document.getElementById("defenseLogs").innerHTML = logsHtml;
+                    // Stats
+                    if (globalDefenseData.node_stats) {
+                        document.getElementById('statSafe').textContent = globalDefenseData.node_stats.safe;
+                        document.getElementById('statWarn').textContent = globalDefenseData.node_stats.warn;
+                        document.getElementById('statBlocked').textContent = globalDefenseData.node_stats.blocked;
+                    }
+                    
+                    if (globalDefenseData.attack_stats) {
+                        document.getElementById('cntSpoof').textContent = globalDefenseData.attack_stats.spoof_blocked;
+                        document.getElementById('cntBipolar').textContent = globalDefenseData.attack_stats.bipolar_detected;
+                        document.getElementById('cntFDI').textContent = globalDefenseData.attack_stats.fdi_blocked;
+                    }
+
+                    // Zones
+                    if (globalDefenseData.rssi_zones && globalDefenseData.rssi_zones.length > 0) {
+                        document.getElementById('blockedZonesContainer').innerHTML = globalDefenseData.rssi_zones.map(z => `<span class="zone-badge">${z}</span>`).join('');
+                    } else {
+                        document.getElementById('blockedZonesContainer').innerHTML = '<span style="color: var(--text-muted); font-size: 0.9em;">No zones blocked yet.</span>';
+                    }
+
+                    // Feed
+                    if (globalDefenseData.inference_logs && globalDefenseData.inference_logs.length > 0) {
+                        const revLogs = [...globalDefenseData.inference_logs].reverse();
+                        document.getElementById("inferenceFeed").innerHTML = revLogs.join("");
+                    }
                 }
                 renderNodeTable();
 
@@ -638,6 +734,8 @@
         updateSortIcons();
         setInterval(updateDashboard, 1000);
         updateDashboard();
+
+        
     </script>
 </body>
 

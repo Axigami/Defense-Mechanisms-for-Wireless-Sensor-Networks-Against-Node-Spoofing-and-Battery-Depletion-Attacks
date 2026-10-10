@@ -152,6 +152,15 @@
             <button class="btn btn-stop" onclick="sendCommand('vna', 'stop')">Halt VNA Attack</button>
             <div id="vna-status" class="status-box">System standing by...</div>
         </div>
+        <!-- Distraction Attack -->
+        <div class="attack-group">
+            <div class="attack-title">
+                <span style="color: #ef4444;">🎭</span> Distraction Attack (Nodes 30,31,32 & 54)
+            </div>
+            <button class="btn btn-start" onclick="sendCommand('distraction', 'start')">Deploy Distraction Attack</button>
+            <button class="btn btn-stop" onclick="sendCommand('distraction', 'stop')">Halt Distraction Attack</button>
+            <div id="distraction-status" class="status-box">System standing by...</div>
+        </div>
     </div>
 
     <script>

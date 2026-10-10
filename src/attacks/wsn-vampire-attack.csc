@@ -572,18 +572,28 @@
   <plugin>
     org.contikios.cooja.plugins.ScriptRunner
     <plugin_config>
-      <script>var FileWriter = Java.type("java.io.FileWriter");
-var FileReader = Java.type("java.io.FileReader");
-var BufferedReader = Java.type("java.io.BufferedReader");
-var File = Java.type("java.io.File");
+      <script>
+          var FileWriter = Java.type("java.io.FileWriter");
+          var BufferedReader = Java.type("java.io.BufferedReader");
+          var FileReader = Java.type("java.io.FileReader");
+          var File = Java.type("java.io.File");
 
-var fileIndex = 1;
-var lineCount = 0;
-var maxLines = 50000;
-var logFile = new FileWriter("E:/Projects/Projects/WSN_dacntt/wsn_dacntt/src/data/logs/run_" + fileIndex + ".log", false);
-var cmdFile = new File("E:/Projects/Projects/WSN_dacntt/wsn_dacntt/src/data/logs/attack.cmd");
+          var fileIndex = 1;
+          var lineCount = 0;
+          var maxLines = 50000;
+          
+          // Mapped directly to E:/Projects/.../wsn_dacntt via Docker -v
+          var logDir = "/home/user/defense-project/src/data/logs";
+          
+          var dir = new File(logDir);
+          if (!dir.exists()) {
+              dir.mkdirs();
+          }
+          
+          var logFile = new FileWriter(logDir + "/run_" + fileIndex + ".log", false);
+          var cmdFile = new File(logDir + "/attack.cmd");
 
-TIMEOUT(3600000, logFile.close(); log.testOK(););
+          TIMEOUT(3600000, logFile.close(); log.testOK(););
 
 while (true) {
     YIELD();
@@ -596,7 +606,7 @@ while (true) {
             logFile.close();
             fileIndex++;
             lineCount = 0;
-            logFile = new FileWriter("E:/Projects/Projects/WSN_dacntt/wsn_dacntt/src/data/logs/run_" + fileIndex + ".log", false);
+            logFile = new FileWriter(logDir + "/run_" + fileIndex + ".log", false);
         }
         
         // --- C&amp;C File Bridge Logic ---

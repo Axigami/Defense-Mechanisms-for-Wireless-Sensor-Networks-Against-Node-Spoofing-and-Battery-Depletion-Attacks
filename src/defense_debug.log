@@ -1,0 +1,76 @@
+2026-10-10 11:03:45,116 - Defense module V4 (Inference Engine) loaded and logger initialized!
+2026-10-10 11:03:45,124 - [TOPOLOGY] Loaded 52 nodes: Node 1: (49.5, 49.5) | Node 2: (68.9, 40.4) | Node 3: (34.4, 45.8) | Node 4: (17.7, 15.8) | Node 5: (463.4, 88.2) | Node 6: (65.0, 57.9) | Node 7: (14.1, 51.2) | Node 8: (42.0, 26.5) | Node 9: (20.5, 64.6) | Node 10: (10.2, 25.0) | Node 11: (61.5, 44.3) | Node 12: (33.5, 20.0) | Node 13: (63.1, 71.5) | Node 14: (23.7, 77.0) | Node 15: (50.6, 66.5) | Node 16: (15.8, 36.9) | Node 17: (42.5, 16.4) | Node 18: (60.2, 26.9) | Node 19: (38.7, 58.4) | Node 20: (24.3, 26.8) | Node 21: (25.2, 50.8) | Node 22: (462.7, 71.7) | Node 23: (51.5, 33.4) | Node 24: (48.8, 77.8) | Node 25: (35.6, 79.0) | Node 26: (33.6, 67.9) | Node 27: (486.4, 59.9) | Node 28: (51.8, 21.1) | Node 29: (473.7, 61.3) | Node 30: (463.1, 37.9) | Node 31: (503.7, 49.4) | Node 32: (470.6, 77.8) | Node 33: (452.6, 43.3) | Node 34: (486.3, 31.7) | Node 35: (482.1, 45.8) | Node 36: (509.8, 65.2) | Node 37: (492.3, 97.4) | Node 38: (515.8, 57.8) | Node 39: (476.6, 94.2) | Node 40: (481.8, 73.6) | Node 41: (493.9, 81.0) | Node 42: (510.0, 77.5) | Node 43: (503.9, 91.8) | Node 44: (495.0, 39.7) | Node 45: (457.2, 58.5) | Node 46: (453.3, 83.0) | Node 47: (493.6, 68.7) | Node 48: (473.4, 34.4) | Node 49: (467.0, 97.9) | Node 51: (449.3, 62.4) | Node 52: (501.5, 60.6) | Node 53: (36.7, 37.0)
+2026-10-10 11:07:03,295 - [SYS] LEARNING COMPLETE: Successfully profiled 50 Node.
+2026-10-10 11:07:03,295 - [PROFILE] Node 31: Baseline RSSI = -75.1 dBm
+2026-10-10 11:07:03,295 - [PROFILE] Node 6: Baseline RSSI = -70.3 dBm
+2026-10-10 11:07:03,296 - [PROFILE] Node 24: Baseline RSSI = -83.2 dBm
+2026-10-10 11:07:03,296 - [PROFILE] Node 15: Baseline RSSI = -68.7 dBm
+2026-10-10 11:07:03,297 - [PROFILE] Node 40: Baseline RSSI = -76.0 dBm
+2026-10-10 11:07:03,297 - [PROFILE] Node 5: Baseline RSSI = -51.4 dBm
+2026-10-10 11:07:03,297 - [PROFILE] Node 36: Baseline RSSI = -82.4 dBm
+2026-10-10 11:07:03,297 - [PROFILE] Node 30: Baseline RSSI = -64.2 dBm
+2026-10-10 11:07:03,297 - [PROFILE] Node 14: Baseline RSSI = -67.8 dBm
+2026-10-10 11:07:03,298 - [PROFILE] Node 49: Baseline RSSI = -83.7 dBm
+2026-10-10 11:07:03,298 - [PROFILE] Node 12: Baseline RSSI = -52.5 dBm
+2026-10-10 11:07:03,298 - [PROFILE] Node 19: Baseline RSSI = -80.5 dBm
+2026-10-10 11:07:03,298 - [PROFILE] Node 25: Baseline RSSI = -59.9 dBm
+2026-10-10 11:07:03,298 - [PROFILE] Node 16: Baseline RSSI = -80.3 dBm
+2026-10-10 11:07:03,298 - [PROFILE] Node 10: Baseline RSSI = -71.7 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 13: Baseline RSSI = -73.7 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 37: Baseline RSSI = -56.0 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 23: Baseline RSSI = -70.9 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 29: Baseline RSSI = -76.0 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 44: Baseline RSSI = -62.6 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 17: Baseline RSSI = -56.1 dBm
+2026-10-10 11:07:03,299 - [PROFILE] Node 48: Baseline RSSI = -81.4 dBm
+2026-10-10 11:07:03,300 - [PROFILE] Node 43: Baseline RSSI = -66.4 dBm
+2026-10-10 11:07:03,300 - [PROFILE] Node 47: Baseline RSSI = -64.1 dBm
+2026-10-10 11:07:03,300 - [PROFILE] Node 4: Baseline RSSI = -46.3 dBm
+2026-10-10 11:07:03,300 - [PROFILE] Node 41: Baseline RSSI = -73.0 dBm
+2026-10-10 11:07:03,301 - [PROFILE] Node 2: Baseline RSSI = -65.9 dBm
+2026-10-10 11:07:03,301 - [PROFILE] Node 34: Baseline RSSI = -50.9 dBm
+2026-10-10 11:07:03,301 - [PROFILE] Node 52: Baseline RSSI = -79.3 dBm
+2026-10-10 11:07:03,301 - [PROFILE] Node 51: Baseline RSSI = -82.8 dBm
+2026-10-10 11:07:03,302 - [PROFILE] Node 33: Baseline RSSI = -74.0 dBm
+2026-10-10 11:07:03,302 - [PROFILE] Node 32: Baseline RSSI = -77.7 dBm
+2026-10-10 11:07:03,302 - [PROFILE] Node 46: Baseline RSSI = -69.5 dBm
+2026-10-10 11:07:03,302 - [PROFILE] Node 38: Baseline RSSI = -49.3 dBm
+2026-10-10 11:07:03,302 - [PROFILE] Node 26: Baseline RSSI = -68.7 dBm
+2026-10-10 11:07:03,303 - [PROFILE] Node 39: Baseline RSSI = -81.1 dBm
+2026-10-10 11:07:03,303 - [PROFILE] Node 22: Baseline RSSI = -83.6 dBm
+2026-10-10 11:07:03,303 - [PROFILE] Node 20: Baseline RSSI = -85.0 dBm
+2026-10-10 11:07:03,303 - [PROFILE] Node 28: Baseline RSSI = -65.5 dBm
+2026-10-10 11:07:03,304 - [PROFILE] Node 53: Baseline RSSI = -73.2 dBm
+2026-10-10 11:07:03,304 - [PROFILE] Node 7: Baseline RSSI = -55.4 dBm
+2026-10-10 11:07:03,304 - [PROFILE] Node 8: Baseline RSSI = -71.6 dBm
+2026-10-10 11:07:03,304 - [PROFILE] Node 45: Baseline RSSI = -74.6 dBm
+2026-10-10 11:07:03,304 - [PROFILE] Node 11: Baseline RSSI = -72.3 dBm
+2026-10-10 11:07:03,304 - [PROFILE] Node 42: Baseline RSSI = -72.6 dBm
+2026-10-10 11:07:03,305 - [PROFILE] Node 18: Baseline RSSI = -50.4 dBm
+2026-10-10 11:07:03,305 - [PROFILE] Node 21: Baseline RSSI = -86.2 dBm
+2026-10-10 11:07:03,306 - [PROFILE] Node 3: Baseline RSSI = -77.6 dBm
+2026-10-10 11:07:03,306 - [PROFILE] Node 9: Baseline RSSI = -60.6 dBm
+2026-10-10 11:07:03,306 - [PROFILE] Node 35: Baseline RSSI = -69.7 dBm
+2026-10-10 11:07:03,306 - INFERENCE [SYS] Node 0: SYSTEM ARMED - Learning phase completed. RSSI Profiling database built. Security layers monitoring in real-time.
+2026-10-10 11:12:00,757 - INFERENCE [WARN] Node 103: 🔍 OBSERVING CLUSTER: NODE 103 - <b>Analysis:</b> Node 103 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:00,759 - INFERENCE [BLACKLIST] Node 103: NODE EXILED: NODE 103 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 103 from network.
+2026-10-10 11:12:01,766 - INFERENCE [WARN] Node 107: 🔍 OBSERVING CLUSTER: NODE 107 - <b>Analysis:</b> Node 107 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:01,766 - INFERENCE [BLACKLIST] Node 107: NODE EXILED: NODE 107 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 107 from network.
+2026-10-10 11:12:01,769 - INFERENCE [WARN] Node 101: 🔍 OBSERVING CLUSTER: NODE 101 - <b>Analysis:</b> Node 101 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:01,770 - INFERENCE [BLACKLIST] Node 101: NODE EXILED: NODE 101 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 101 from network.
+2026-10-10 11:12:02,780 - INFERENCE [WARN] Node 110: 🔍 OBSERVING CLUSTER: NODE 110 - <b>Analysis:</b> Node 110 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:02,780 - INFERENCE [BLACKLIST] Node 110: NODE EXILED: NODE 110 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 110 from network.
+2026-10-10 11:12:03,796 - INFERENCE [WARN] Node 105: 🔍 OBSERVING CLUSTER: NODE 105 - <b>Analysis:</b> Node 105 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:03,797 - INFERENCE [BLACKLIST] Node 105: NODE EXILED: NODE 105 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 105 from network.
+2026-10-10 11:12:04,809 - INFERENCE [WARN] Node 104: 🔍 OBSERVING CLUSTER: NODE 104 - <b>Analysis:</b> Node 104 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:04,809 - INFERENCE [BLACKLIST] Node 104: NODE EXILED: NODE 104 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 104 from network.
+2026-10-10 11:12:04,813 - INFERENCE [WARN] Node 100: 🔍 OBSERVING CLUSTER: NODE 100 - <b>Analysis:</b> Node 100 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:04,814 - INFERENCE [BLACKLIST] Node 100: NODE EXILED: NODE 100 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 100 from network.
+2026-10-10 11:12:08,879 - INFERENCE [WARN] Node 106: 🔍 OBSERVING CLUSTER: NODE 106 - <b>Analysis:</b> Node 106 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:08,880 - INFERENCE [BLACKLIST] Node 106: NODE EXILED: NODE 106 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 106 from network.
+2026-10-10 11:12:09,900 - INFERENCE [WARN] Node 109: 🔍 OBSERVING CLUSTER: NODE 109 - <b>Analysis:</b> Node 109 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:09,900 - INFERENCE [BLACKLIST] Node 109: NODE EXILED: NODE 109 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 109 from network.
+2026-10-10 11:12:13,947 - INFERENCE [WARN] Node 102: 🔍 OBSERVING CLUSTER: NODE 102 - <b>Analysis:</b> Node 102 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:13,948 - INFERENCE [BLACKLIST] Node 102: NODE EXILED: NODE 102 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 102 from network.
+2026-10-10 11:12:23,070 - INFERENCE [WARN] Node 108: 🔍 OBSERVING CLUSTER: NODE 108 - <b>Analysis:</b> Node 108 reported 85.0C. Pausing decision to gather neighbor data for 6.0s.<br><b>Action:</b> System holds verdict.
+2026-10-10 11:12:23,070 - INFERENCE [BLACKLIST] Node 108: NODE EXILED: NODE 108 BLACKLISTED - Trust Score fell below 40%. Completely isolated Node 108 from network.

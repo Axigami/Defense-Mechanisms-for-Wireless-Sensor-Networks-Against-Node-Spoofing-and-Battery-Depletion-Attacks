@@ -46,6 +46,20 @@ def stop_vna():
         return jsonify({'status': 'success', 'message': 'VNA Attack Stopped'})
     return jsonify({'status': 'error', 'message': f'Command failed: {msg}'}), 500
 
+@app.route('/api/distraction/start', methods=['POST'])
+def start_distraction():
+    success, msg = send_command('START_DISTRACTION')
+    if success:
+        return jsonify({'status': 'success', 'message': 'Distraction Attack Started'})
+    return jsonify({'status': 'error', 'message': f'Connection failed: {msg}'}), 500
+
+@app.route('/api/distraction/stop', methods=['POST'])
+def stop_distraction():
+    success, msg = send_command('STOP_DISTRACTION')
+    if success:
+        return jsonify({'status': 'success', 'message': 'Distraction Attack Stopped'})
+    return jsonify({'status': 'error', 'message': f'Connection failed: {msg}'}), 500
+
 if __name__ == '__main__':
     print("Starting Attacker Dashboard on http://localhost:5001")
     app.run(host='0.0.0.0', port=5001)
