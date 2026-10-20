@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <simconf>
   <simulation>
     <title>wsn-2sink-full</title>
@@ -7,12 +7,12 @@
     <radiomedium>
       org.contikios.cooja.radiomediums.UDGM
       <transmitting_range>50.0</transmitting_range>
-      <interference_range>50.0</interference_range>
+      <interference_range>100.0</interference_range>
       <success_ratio_tx>1.0</success_ratio_tx>
       <success_ratio_rx>1.0</success_ratio_rx>
     </radiomedium>
     <events>
-      <logoutput>40000</logoutput>
+      <logoutput>200000</logoutput>
     </events>
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
@@ -26,6 +26,22 @@
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiClock</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRadio</moteinterface>
     </motetype>
+  <motetype>
+    org.contikios.cooja.contikimote.ContikiMoteType
+    <identifier>vampiretype</identifier>
+    <description>Vampire Switchable</description>
+    <source>[CONFIG_DIR]/attacks/vampire_attack/vampire_switchable.c</source>
+    <commands>make vampire_switchable.cooja TARGET=cooja</commands>
+    <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRS232</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiBeeper</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiClock</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRadio</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiButton</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiPIR</moteinterface>
+    <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiLED</moteinterface>
+  </motetype>
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <identifier>nodetype</identifier>
@@ -405,54 +421,54 @@
   <mote>
     <interface_config>
       org.contikios.cooja.interfaces.Position
-      <x>547.63</x>
-      <y>29.97</y>
+      <x>70.0</x>
+      <y>60.0</y>
       <z>0.0</z>
     </interface_config>
     <interface_config>
       org.contikios.cooja.contikimote.interfaces.ContikiMoteID
       <id>29</id>
     </interface_config>
-    <motetype_identifier>nodetype</motetype_identifier>
+    <motetype_identifier>vampiretype</motetype_identifier>
   </mote>
   <mote>
     <interface_config>
       org.contikios.cooja.interfaces.Position
-      <x>437.69</x>
-      <y>-0.97</y>
+      <x>35.0</x>
+      <y>70.0</y>
       <z>0.0</z>
     </interface_config>
     <interface_config>
       org.contikios.cooja.contikimote.interfaces.ContikiMoteID
       <id>30</id>
     </interface_config>
-    <motetype_identifier>nodetype</motetype_identifier>
+    <motetype_identifier>vampiretype</motetype_identifier>
   </mote>
   <mote>
     <interface_config>
       org.contikios.cooja.interfaces.Position
-      <x>494.59</x>
-      <y>8.99</y>
+      <x>90.0</x>
+      <y>75.0</y>
       <z>0.0</z>
     </interface_config>
     <interface_config>
       org.contikios.cooja.contikimote.interfaces.ContikiMoteID
       <id>31</id>
     </interface_config>
-    <motetype_identifier>nodetype</motetype_identifier>
+    <motetype_identifier>vampiretype</motetype_identifier>
   </mote>
   <mote>
     <interface_config>
       org.contikios.cooja.interfaces.Position
-      <x>470.63</x>
-      <y>77.77</y>
+      <x>60.0</x>
+      <y>85.0</y>
       <z>0.0</z>
     </interface_config>
     <interface_config>
       org.contikios.cooja.contikimote.interfaces.ContikiMoteID
       <id>32</id>
     </interface_config>
-    <motetype_identifier>nodetype</motetype_identifier>
+    <motetype_identifier>vampiretype</motetype_identifier>
   </mote>
   <mote>
     <interface_config>
@@ -729,42 +745,132 @@ var maxLines = 50000;
 var logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
 var cmdFile = new File("../../../data/logs/attack.cmd");
 
-TIMEOUT(3600000, logFile.close(); log.testOK(););
+// ========================================
+// CRITICAL FIX: Delete old attack.cmd at startup
+// Prevents auto-activation from previous run
+// ========================================
+if (cmdFile.exists()) {
+    cmdFile.delete();
+    log.log("STARTUP: Cleaned up old attack.cmd file\n");
+}
+
+// ========================================
+// TIMEOUT: 24 hours simulation time (was 1 hour)
+// This allows long-running simulations to complete
+// and generate multiple log files continuously.
+// ========================================
+TIMEOUT(86400000, logFile.close(); log.testOK(););
 
 while (true) {
     YIELD();
+    
+    // --- Core logging with safe file rotation ---
     try {
         logFile.write(time + " ID:" + id + " " + msg + "\n");
         logFile.flush();
         lineCount++;
-        
-        if (lineCount &gt;= maxLines) {
-            logFile.close();
-            fileIndex++;
-            lineCount = 0;
-            logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
+    } catch (writeErr) {
+        // Recover from write errors: reopen the file in append mode
+        try {
+            logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", true);
+            log.log("RECOVERED: Reopened log file after write error\n");
+        } catch (reopenErr) {
+            log.log("ERROR: Cannot reopen log file: " + reopenErr + "\n");
         }
-        
-        // --- C&amp;C File Bridge Logic ---
-        if (cmdFile.exists()) {
-            var reader = new BufferedReader(new FileReader(cmdFile));
-            var cmd = reader.readLine();
-            reader.close();
-            if (cmd != null &amp;&amp; cmd.length() &gt; 0) {
-                // Determine target node (Sybil is 53)
-                var m = sim.getMoteWithID(53);
-                if (m != null) {
-                    write(m, cmd);
-                }
-            }
-            cmdFile.delete();
-        }
-        // -----------------------------
-        
-    } catch (e) {
-        logFile.close();
-        throw e;
     }
+    
+    // --- File rotation ---
+    if (lineCount &gt;= maxLines) {
+        try {
+            logFile.close();
+        } catch (closeErr) { /* ignore close errors */ }
+        fileIndex++;
+        lineCount = 0;
+        try {
+            logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
+            log.log("ROTATE: Started new log file run_" + fileIndex + ".log\n");
+        } catch (rotateErr) {
+            log.log("ERROR: Cannot create new log file: " + rotateErr + "\n");
+        }
+    }
+    
+    // --- Multi-Node Vampire Attack Command Bridge ---
+    try {
+        if (cmdFile.exists()) {
+            var reader = null;
+            try {
+                reader = new BufferedReader(new FileReader(cmdFile));
+                var cmdLine = reader.readLine();
+                reader.close();
+                reader = null;
+                
+                if (cmdLine != null &amp;&amp; cmdLine.length() &gt; 0) {
+                    // Parse command: "COMMAND" or "COMMAND|NODES=29,30,31"
+                    var cmd = cmdLine;
+                    var targetNodes = java.lang.reflect.Array.newInstance(java.lang.Integer.TYPE, 1);
+                    targetNodes[0] = 29; // Default
+                    var numNodes = 1;
+                    
+                    var pipeIndex = cmdLine.indexOf("|NODES=");
+                    if (pipeIndex &gt; -1) {
+                        cmd = cmdLine.substring(0, pipeIndex);
+                        var nodesStr = cmdLine.substring(pipeIndex + 7); // Skip "|NODES="
+                        
+                        // Parse node IDs
+                        var tempNodes = [];
+                        var currentNum = "";
+                        for (var i = 0; i &lt; nodesStr.length(); i++) {
+                            var ch = nodesStr.charAt(i);
+                            if (ch &gt;= '0' &amp;&amp; ch &lt;= '9') {
+                                currentNum = currentNum + ch;
+                            } else if (ch === ',' &amp;&amp; currentNum.length() &gt; 0) {
+                                tempNodes.push(java.lang.Integer.parseInt(currentNum));
+                                currentNum = "";
+                            }
+                        }
+                        if (currentNum.length() &gt; 0) {
+                            tempNodes.push(java.lang.Integer.parseInt(currentNum));
+                        }
+                        
+                        if (tempNodes.length &gt; 0) {
+                            targetNodes = java.lang.reflect.Array.newInstance(java.lang.Integer.TYPE, tempNodes.length);
+                            for (var i = 0; i &lt; tempNodes.length; i++) {
+                                targetNodes[i] = tempNodes[i];
+                            }
+                            numNodes = tempNodes.length;
+                        }
+                    }
+                    
+                    // Send command to nodes
+                    var nodeList = "";
+                    for (var i = 0; i &lt; numNodes; i++) {
+                        if (i &gt; 0) nodeList = nodeList + ",";
+                        nodeList = nodeList + targetNodes[i];
+                    }
+                    log.log("VAMPIRE_CMD: " + cmd + " to nodes [" + nodeList + "]\n");
+                    
+                    for (var i = 0; i &lt; numNodes; i++) {
+                        var nodeId = targetNodes[i];
+                        var mote = sim.getMoteWithID(nodeId);
+                        if (mote != null) {
+                            write(mote, cmd);
+                            log.log("  sent to node " + nodeId + "\n");
+                        } else {
+                            log.log("  node " + nodeId + " not found\n");
+                        }
+                    }
+                }
+            } catch (readErr) {
+                log.log("CMD_BRIDGE: Error reading command file: " + readErr + "\n");
+                if (reader != null) { try { reader.close(); } catch (ce) {} }
+            }
+            // Always clean up the command file
+            try { cmdFile.delete(); } catch (delErr) {}
+        }
+    } catch (cmdErr) {
+        log.log("CMD_BRIDGE: Unexpected error: " + cmdErr + "\n");
+    }
+    // -----------------------------------------
 }
 </script>
       <active>true</active>

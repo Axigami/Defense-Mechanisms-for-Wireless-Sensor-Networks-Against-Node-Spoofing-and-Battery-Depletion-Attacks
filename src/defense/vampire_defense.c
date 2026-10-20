@@ -75,7 +75,7 @@ vampire_defense_check_neighbors(void)
 {
   int i, detected = 0;
   uint32_t now = clock_seconds();
-  int16_t features[3];
+  int16_t features[VAMPIRE_NUM_FEATURES] = {0};
   
   /* Update root version */
   if(curr_instance.used && curr_instance.dag.rank != RPL_INFINITE_RANK) {
@@ -96,17 +96,17 @@ vampire_defense_check_neighbors(void)
     /* Extract features từ RPL neighbor info */
     rpl_nbr_t *nbr = rpl_neighbor_get_from_ipaddr(&neighbors[i].addr);
     if(nbr != NULL) {
-      /* Feature 0: DIO rate (normalized to 60s window) */
-      features[0] = neighbors[i].dio_count;
+      /* Feature: DIO rate */
+      features[FEAT_DIO_RATE] = neighbors[i].dio_count;
       
-      /* Feature 1: Version delta */
+      /* Feature: Version delta */
       uint16_t nbr_version = 0;  /* Get từ DIO message */
-      features[1] = (int16_t)(nbr_version > root_version ? 
+      features[FEAT_VERSION_DELTA] = (int16_t)(nbr_version > root_version ? 
                               nbr_version - root_version : 
                               root_version - nbr_version);
       
-      /* Feature 2: Rank */
-      features[2] = (int16_t)nbr->rank;
+      /* Feature: Rank */
+      features[FEAT_RANK] = (int16_t)nbr->rank;
       
       /* Run decision tree detector */
       int result = vampire_detect(features);

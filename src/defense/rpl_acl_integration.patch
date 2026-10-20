@@ -1,0 +1,83 @@
+diff --git a/os/net/routing/rpl-lite/rpl-icmp6.c b/os/net/routing/rpl-lite/rpl-icmp6.c
+index 1234567..abcdefg 100644
+--- a/os/net/routing/rpl-lite/rpl-icmp6.c
++++ b/os/net/routing/rpl-lite/rpl-icmp6.c
+@@ -50,6 +50,11 @@
+ #include "net/routing/rpl-lite/rpl-icmp6.h"
+ #include "net/routing/rpl-lite/rpl-timers.h"
+ 
++#ifdef VAMPIRE_DEFENSE_ENABLED
++#include "vampire_defense_ml.h"
++extern bool acl_is_blacklisted_addr(const uip_ipaddr_t *addr);
++#endif
++
+ /* Log configuration */
+ #include "sys/log.h"
+ #define LOG_MODULE "RPL"
+@@ -300,6 +305,15 @@ dio_input(void)
+   uip_ipaddr_t from;
+   uip_ipaddr_copy(&from, &UIP_IP_BUF->srcipaddr);
+ 
++#ifdef VAMPIRE_DEFENSE_ENABLED
++  /* Check ACL blacklist before processing DIO */
++  if(acl_is_blacklisted_addr(&from)) {
++    LOG_WARN("ACL: Dropped DIO from blacklisted ");
++    LOG_WARN_6ADDR(&from);
++    LOG_WARN_("\n");
++    goto discard;
++  }
++#endif
++
+   /* Check if the DIO is from a known neighbor */
+   nbr = uip_ds6_nbr_lookup(&from);
+   if(nbr == NULL) {
+@@ -450,6 +464,14 @@ dio_input(void)
+     }
+   }
+ 
++#ifdef VAMPIRE_DEFENSE_ENABLED
++  /* Run vampire detection AFTER parsing DIO */
++  vampire_defense_check_dio(&from, dio.rank, dio.version);
++  /* Re-check ACL in case detection just added this node */
++  if(acl_is_blacklisted_addr(&from)) {
++    goto discard;
++  }
++#endif
++
+ #if RPL_WITH_DAO_ACK
+   if(RPL_DIO_IS_GROUNDED(dio.flags)) {
+     if(curr_instance.dag.rank != ROOT_RANK(curr_instance)) {
+@@ -550,6 +572,15 @@ dao_input(void)
+   uip_ipaddr_copy(&dao_sender_addr, &UIP_IP_BUF->srcipaddr);
+   buffer_length = uip_len - uip_l3_icmp_hdr_len;
+ 
++#ifdef VAMPIRE_DEFENSE_ENABLED
++  /* Check ACL blacklist before processing DAO */
++  if(acl_is_blacklisted_addr(&dao_sender_addr)) {
++    LOG_WARN("ACL: Dropped DAO from blacklisted ");
++    LOG_WARN_6ADDR(&dao_sender_addr);
++    LOG_WARN_("\n");
++    goto discard;
++  }
++#endif
++
+   /* Check if there are no flags indicating that this is a DAO */
+   if(buffer[pos] != RPL_OPTION_DAG_METRIC_CONTAINER) {
+     LOG_ERR("!: DIO option, not DAO flag (0x%02x)\n", buffer[pos]);
+@@ -780,6 +811,16 @@ dao_ack_input(void)
+   LOG_DBG("received a DAO-ACK with seqno %u and status %u from ",
+           sequence, status);
+   LOG_DBG_6ADDR(&UIP_IP_BUF->srcipaddr);
++
++#ifdef VAMPIRE_DEFENSE_ENABLED
++  /* Check ACL blacklist for DAO-ACK */
++  if(acl_is_blacklisted_addr(&UIP_IP_BUF->srcipaddr)) {
++    LOG_WARN("ACL: Dropped DAO-ACK from blacklisted ");
++    LOG_WARN_6ADDR(&UIP_IP_BUF->srcipaddr);
++    LOG_WARN_("\n");
++    goto discard;
++  }
++#endif
+   LOG_DBG_("\n");
+ 
+   /*

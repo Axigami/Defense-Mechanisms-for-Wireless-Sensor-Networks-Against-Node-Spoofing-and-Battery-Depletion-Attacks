@@ -1,0 +1,412 @@
+/**
+ * Vampire Attack Detector - Auto-generated from trained DecisionTree
+ * ===================================================================
+ * 
+ *
+ * Model: DecisionTreeClassifier
+ * Total features: 5
+ * Features actually used by tree: 5
+ * Classes: NORMAL, VAMPIRE
+ * Calibrated Decision Threshold: 0.65 (65%)
+ * Tree depth: 7
+ * Tree leaves: 81
+ *
+ * Features used:
+ *   [0] dio_rate
+ *   [1] version_delta
+ *   [2] rank
+ *   [3] rank_delta
+ *   [4] is_poison
+ */
+
+#ifndef VAMPIRE_DETECTOR_H
+#define VAMPIRE_DETECTOR_H
+
+#include <stdint.h>
+
+/* ================================================================
+ * FEATURE INDICES
+ * Moi feature la 1 phan tu trong mang int16_t features[5]
+ * ================================================================ */
+#define FEAT_DIO_RATE                                 0  /* USED */
+#define FEAT_VERSION_DELTA                            1  /* USED */
+#define FEAT_RANK                                     2  /* USED */
+#define FEAT_RANK_DELTA                               3  /* USED */
+#define FEAT_IS_POISON                                4  /* USED */
+
+#define VAMPIRE_NUM_FEATURES 5
+
+/* Calibrated decision threshold (0-100) */
+#define VAMPIRE_DECISION_THRESHOLD_PCT 65
+
+#if defined(__GNUC__) || defined(__clang__)
+static const char *ATTACK_NAMES[] __attribute__((unused)) = {"NORMAL", "ATTACK"};
+#else
+static const char *ATTACK_NAMES[] = {"NORMAL", "ATTACK"};
+#endif
+
+/* ================================================================
+ * DETECTION FUNCTION
+ * Tra ve: 0 = NORMAL, 1 = VAMPIRE DETECTED
+ *
+ * Day la cay quyet dinh THAT duoc train tu du lieu simulation.
+ * Nguong quyet dinh da duoc toi uu hoa: threshold = 0.65 (65%)
+ * Tham so: features[] - mang 5 phan tu int16_t
+ * ================================================================ */
+static inline int detect_vampire_attack(const int16_t *features) {
+    if (features[0] <= 8.50) {  /* dio_rate */
+        if (features[2] <= 998.50) {  /* rank */
+            if (features[0] <= 7.50) {  /* dio_rate */
+                if (features[0] <= 3.50) {  /* dio_rate */
+                    if (features[2] <= 397.50) {  /* rank */
+                        if (features[2] <= 358.50) {  /* rank */
+                            if (features[0] <= 2.50) {  /* dio_rate */
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.05, 95% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[3] <= 2.50) {  /* rank_delta */
+                                return 0;  /* NORMAL (p_attack=0.01, 99% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.20, 80% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        if (features[1] <= 1.50) {  /* version_delta */
+                            return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                        } else {
+                            if (features[3] <= 152) {  /* rank_delta */
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.05, 95% conf, 1 samples) */
+                            }
+                        }
+                    }
+                } else {
+                    if (features[2] <= 434.50) {  /* rank */
+                        if (features[2] <= 256.50) {  /* rank */
+                            if (features[2] <= 192) {  /* rank */
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.14, 86% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[3] <= 697) {  /* rank_delta */
+                                return 0;  /* NORMAL (p_attack=0.25, 75% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=0.71, 71% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        if (features[3] <= 399.50) {  /* rank_delta */
+                            if (features[1] <= 4.50) {  /* version_delta */
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.08, 92% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[0] <= 5.50) {  /* dio_rate */
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.48, 52% conf, 1 samples) */
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (features[2] <= 316.50) {  /* rank */
+                    if (features[2] <= 192) {  /* rank */
+                        return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                    } else {
+                        if (features[1] <= 0.50) {  /* version_delta */
+                            if (features[2] <= 257.50) {  /* rank */
+                                return 1;  /* VAMPIRE (p_attack=0.88, 88% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.44, 56% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[1] <= 1.50) {  /* version_delta */
+                                return 1;  /* VAMPIRE (p_attack=0.93, 93% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.62, 38% conf, 1 samples) */
+                            }
+                        }
+                    }
+                } else {
+                    if (features[1] <= 0.50) {  /* version_delta */
+                        if (features[3] <= 368) {  /* rank_delta */
+                            if (features[2] <= 388) {  /* rank */
+                                return 0;  /* NORMAL (p_attack=0.07, 93% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            }
+                        } else {
+                            return 0;  /* NORMAL (p_attack=0.42, 58% conf, 1 samples) */
+                        }
+                    } else {
+                        if (features[3] <= 1.50) {  /* rank_delta */
+                            return 1;  /* VAMPIRE (p_attack=0.90, 90% conf, 1 samples) */
+                        } else {
+                            if (features[2] <= 380) {  /* rank */
+                                return 0;  /* NORMAL (p_attack=0.60, 40% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.08, 92% conf, 1 samples) */
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            if (features[4] <= 0.50) {  /* is_poison */
+                if (features[2] <= 1002) {  /* rank */
+                    if (features[0] <= 1.50) {  /* dio_rate */
+                        if (features[3] <= 733.50) {  /* rank_delta */
+                            if (features[1] <= 0.50) {  /* version_delta */
+                                return 0;  /* NORMAL (p_attack=0.11, 89% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.33, 67% conf, 1 samples) */
+                            }
+                        } else {
+                            return 1;  /* VAMPIRE (p_attack=0.79, 79% conf, 1 samples) */
+                        }
+                    } else {
+                        if (features[0] <= 2.50) {  /* dio_rate */
+                            return 0;  /* NORMAL (p_attack=0.48, 52% conf, 1 samples) */
+                        } else {
+                            if (features[1] <= 0.50) {  /* version_delta */
+                                return 1;  /* VAMPIRE (p_attack=0.68, 68% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.56, 44% conf, 1 samples) */
+                            }
+                        }
+                    }
+                } else {
+                    if (features[3] <= 386.50) {  /* rank_delta */
+                        return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                    } else {
+                        return 0;  /* NORMAL (p_attack=0.30, 70% conf, 1 samples) */
+                    }
+                }
+            } else {
+                if (features[3] <= 0.50) {  /* rank_delta */
+                    if (features[0] <= 2.50) {  /* dio_rate */
+                        if (features[0] <= 0.50) {  /* dio_rate */
+                            if (features[1] <= 0.50) {  /* version_delta */
+                                return 0;  /* NORMAL (p_attack=0.38, 62% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=0.78, 78% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[1] <= 2.50) {  /* version_delta */
+                                return 1;  /* VAMPIRE (p_attack=0.70, 70% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.30, 70% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        if (features[0] <= 5.50) {  /* dio_rate */
+                            if (features[0] <= 3.50) {  /* dio_rate */
+                                return 0;  /* NORMAL (p_attack=0.14, 86% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.28, 72% conf, 1 samples) */
+                            }
+                        } else {
+                            return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                        }
+                    }
+                } else {
+                    if (features[1] <= 1.50) {  /* version_delta */
+                        if (features[0] <= 0.50) {  /* dio_rate */
+                            return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                        } else {
+                            if (features[2] <= 1027) {  /* rank */
+                                return 0;  /* NORMAL (p_attack=0.35, 65% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        if (features[3] <= 86) {  /* rank_delta */
+                            if (features[3] <= 38.50) {  /* rank_delta */
+                                return 0;  /* NORMAL (p_attack=0.60, 40% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                            }
+                        } else {
+                            return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        if (features[0] <= 11.50) {  /* dio_rate */
+            if (features[2] <= 380.50) {  /* rank */
+                if (features[4] <= 0.50) {  /* is_poison */
+                    if (features[2] <= 192) {  /* rank */
+                        return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                    } else {
+                        if (features[1] <= 0.50) {  /* version_delta */
+                            if (features[2] <= 269.50) {  /* rank */
+                                return 1;  /* VAMPIRE (p_attack=0.88, 88% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.56, 44% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[3] <= 3.50) {  /* rank_delta */
+                                return 1;  /* VAMPIRE (p_attack=0.81, 81% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=0.97, 97% conf, 1 samples) */
+                            }
+                        }
+                    }
+                } else {
+                    if (features[0] <= 9.50) {  /* dio_rate */
+                        return 0;  /* NORMAL (p_attack=0.00, 100% conf, 1 samples) */
+                    } else {
+                        return 0;  /* NORMAL (p_attack=0.39, 61% conf, 1 samples) */
+                    }
+                }
+            } else {
+                if (features[3] <= 372.50) {  /* rank_delta */
+                    if (features[0] <= 10.50) {  /* dio_rate */
+                        if (features[2] <= 825) {  /* rank */
+                            if (features[1] <= 2.50) {  /* version_delta */
+                                return 0;  /* NORMAL (p_attack=0.05, 95% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.45, 55% conf, 1 samples) */
+                            }
+                        } else {
+                            return 0;  /* NORMAL (p_attack=0.50, 50% conf, 1 samples) */
+                        }
+                    } else {
+                        return 1;  /* VAMPIRE (p_attack=0.69, 69% conf, 1 samples) */
+                    }
+                } else {
+                    if (features[2] <= 559.50) {  /* rank */
+                        return 0;  /* NORMAL (p_attack=0.60, 40% conf, 1 samples) */
+                    } else {
+                        return 1;  /* VAMPIRE (p_attack=0.90, 90% conf, 1 samples) */
+                    }
+                }
+            }
+        } else {
+            if (features[3] <= 0.50) {  /* rank_delta */
+                if (features[2] <= 270) {  /* rank */
+                    if (features[4] <= 0.50) {  /* is_poison */
+                        if (features[2] <= 259.50) {  /* rank */
+                            return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                        } else {
+                            return 1;  /* VAMPIRE (p_attack=0.92, 92% conf, 1 samples) */
+                        }
+                    } else {
+                        if (features[2] <= 264) {  /* rank */
+                            return 1;  /* VAMPIRE (p_attack=0.71, 71% conf, 1 samples) */
+                        } else {
+                            return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                        }
+                    }
+                } else {
+                    if (features[2] <= 820.50) {  /* rank */
+                        if (features[4] <= 0.50) {  /* is_poison */
+                            if (features[0] <= 23.50) {  /* dio_rate */
+                                return 0;  /* NORMAL (p_attack=0.63, 37% conf, 1 samples) */
+                            } else {
+                                return 0;  /* NORMAL (p_attack=0.11, 89% conf, 1 samples) */
+                            }
+                        } else {
+                            if (features[1] <= 5.50) {  /* version_delta */
+                                return 1;  /* VAMPIRE (p_attack=0.82, 82% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        if (features[4] <= 0.50) {  /* is_poison */
+                            if (features[0] <= 24) {  /* dio_rate */
+                                return 1;  /* VAMPIRE (p_attack=0.97, 97% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                            }
+                        } else {
+                            return 0;  /* NORMAL (p_attack=0.07, 93% conf, 1 samples) */
+                        }
+                    }
+                }
+            } else {
+                if (features[2] <= 720.50) {  /* rank */
+                    if (features[3] <= 506.50) {  /* rank_delta */
+                        if (features[2] <= 381.50) {  /* rank */
+                            return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                        } else {
+                            if (features[0] <= 14.50) {  /* dio_rate */
+                                return 1;  /* VAMPIRE (p_attack=0.83, 83% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=0.98, 98% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        if (features[3] <= 679.50) {  /* rank_delta */
+                            if (features[0] <= 37) {  /* dio_rate */
+                                return 0;  /* NORMAL (p_attack=0.20, 80% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                            }
+                        } else {
+                            return 1;  /* VAMPIRE (p_attack=1.00, 100% conf, 1 samples) */
+                        }
+                    }
+                } else {
+                    if (features[0] <= 30.50) {  /* dio_rate */
+                        if (features[3] <= 458) {  /* rank_delta */
+                            return 0;  /* NORMAL (p_attack=0.25, 75% conf, 1 samples) */
+                        } else {
+                            if (features[3] <= 720) {  /* rank_delta */
+                                return 1;  /* VAMPIRE (p_attack=0.93, 93% conf, 1 samples) */
+                            } else {
+                                return 1;  /* VAMPIRE (p_attack=0.71, 71% conf, 1 samples) */
+                            }
+                        }
+                    } else {
+                        return 0;  /* NORMAL (p_attack=0.10, 90% conf, 1 samples) */
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ================================================================
+ * CONFIDENCE SCORE (0-100)
+ * Tinh diem do tin cay dua tren cac feature quan trong nhat
+ * ================================================================ */
+static inline int vampire_detect_confidence(const int16_t *features) {
+    int score = 0;
+
+    /* dio_rate */
+    if (features[0] > 6) score += 20;
+
+    /* version_delta */
+    if (features[1] > 1) score += 20;
+
+    /* rank */
+    if (features[2] > 380) score += 20;
+
+    /* rank_delta */
+    if (features[3] > 370) score += 20;
+
+    /* is_poison */
+    if (features[4] > 0) score += 20;
+
+    return (score > 100) ? 100 : score;
+}
+
+/* ================================================================
+ * SIMPLIFIED 3-FEATURE DETECTION (backward compatible)
+ * ================================================================ */
+static inline int vampire_detect(int16_t *features) {
+    return detect_vampire_attack(features);
+}
+
+#endif /* VAMPIRE_DETECTOR_H */

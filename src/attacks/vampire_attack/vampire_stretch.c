@@ -63,6 +63,7 @@ PROCESS_THREAD(vampire_stretch_process, ev, data)
   LOG_INFO("============================================\n");
   LOG_INFO("VAMPIRE ATTACK: STRETCH ATTACK ACTIVATED\n");
   LOG_INFO("Attack strategy: RPL rank manipulation (high rank)\n");
+  LOG_INFO("TAG: ATTACK_TYPE=STRETCH\n");
   LOG_INFO("============================================\n");
   
   etimer_set(&send_timer, NORMAL_SEND_INTERVAL);
@@ -81,7 +82,7 @@ PROCESS_THREAD(vampire_stretch_process, ev, data)
                                        (random_rand() % MALICIOUS_RANK_VARIANCE);
             curr_instance.dag.rank = malicious_rank;
             
-            LOG_INFO("STRETCH_ATTACK rank_manipulation: %u -> %u (attack #%lu)\n", 
+            LOG_INFO("STRETCH_ATTACK rank_manipulation: %u -> %u (attack #%lu) TAG:ACTION=RANK_MANIP\n", 
                      old_rank, curr_instance.dag.rank, (unsigned long)++attack_count);
             
             // Advertise the malicious rank via DIO

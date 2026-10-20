@@ -34,14 +34,17 @@ network_data = {
     'active_routes': 0,
     'total_packets_received': 0,
     'total_packets_sent': 0,
-    'nodes': {},  # {node_id: {cluster, seq, energy, temp, latency, last_seen}}
+    'nodes': {},  # {node_id: {cluster, seq, energy, temp, latency, last_seen, rank}}
     'history': deque(maxlen=1000),  # Lưu lịch sử để vẽ charts
     'fire_alerts': {}, # {node_id: timestamp}
     'vna_events': deque(maxlen=50),
     'sybil_events': set(), # {timestamp, node_id, old_version, new_version}
+    'vampire_events': deque(maxlen=50),  # Vampire attack events
+    'ml_defense_events': deque(maxlen=100),  # ML defense alert events
+    'global_repairs': 0,  # Count of global repairs
     'cluster_stats': {
-        1: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0},
-        2: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0}
+        1: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0, 'avg_rank': 0},
+        2: {'energy_sum': 0, 'node_count': 0, 'parent_switches': 0, 'avg_rank': 0}
     }
 }
 
@@ -59,7 +62,22 @@ LOG_PATTERNS = {
                          r'version=(?P<ver>\d+_\d+)'),
     'vna': re.compile(r'ID:(?P<node>\d+).*ATTACK_VNA.*: Triggered! Version changed (?P<old>\d+) -> (?P<new>\d+)'),
     'parent_switch': re.compile(r'ID:(?P<node>\d+).*parent switch:'),
-    'status': re.compile(r'STATUS node=(?P<node>\d+) energy_mj=(?P<e>\d+)'),
+    'status': re.compile(r'STATUS node=(?P<node>\d+) energy_mj=(?P<e>\d+).*rank=(?P<rank>\d+)'),
+    # VAMPIRE ATTACK PATTERNS
+    'vampire_activate': re.compile(r'ID:29.*=== ACTIVATING (?P<type>\w+) ATTACK ==='),
+    'vampire_carousel': re.compile(r'ID:29.*CAROUSEL_ATTACK version_manipulation: (?P<old>\d+) -> (?P<new>\d+)'),
+    'vampire_stretch': re.compile(r'ID:29.*STRETCH_ATTACK rank_manipulation: (?P<old>\d+) -> (?P<new>\d+)'),
+    'vampire_stealth': re.compile(r'ID:29.*STEALTH_ATTACK'),
+    'global_repair': re.compile(r'apply global repair'),
+    'rank_status': re.compile(r'ID:(?P<node>\d+).*rank=(?P<rank>\d+)'),
+    # ML DEFENSE MONITOR PATTERN
+    'ml_alert': re.compile(
+        r'ML_ALERT\s+detector=(?P<detector>\d+)\s+suspect=(?P<suspect>[^\s]+)\s+'
+        r'type=(?P<type>\w+)\s+source=(?P<source>\w+)\s+alerts=(?P<alerts>\d+)\s+'
+        r'dio_rate=(?P<dio_rate>-?\d+)\s+version_delta=(?P<version_delta>-?\d+)\s+'
+        r'rank=(?P<rank>-?\d+)\s+rank_delta=(?P<rank_delta>-?\d+)\s+'
+        r'is_poison=(?P<is_poison>-?\d+)'
+    ),
 }
 
 
@@ -386,6 +404,99 @@ class LogFileWatcher(threading.Thread):
             network_data['version'] = m.group('ver')
             network_data['sink_id'] = int(m.group('sink'))
             return
+        
+        # ======= VAMPIRE ATTACK DETECTION =======
+        
+        # Parse VAMPIRE ATTACK ACTIVATION
+        m = LOG_PATTERNS['vampire_activate'].search(line)
+        if m:
+            attack_type = m.group('type')
+            network_data['vampire_events'].append({
+                'timestamp': timestamp,
+                'type': 'ACTIVATION',
+                'attack_type': attack_type,
+                'message': f"{attack_type} ATTACK activated"
+            })
+            logger.warning(f"🔴 VAMPIRE ATTACK: {attack_type} activated!")
+            return
+        
+        # Parse CAROUSEL VERSION MANIPULATION
+        m = LOG_PATTERNS['vampire_carousel'].search(line)
+        if m:
+            old_ver = int(m.group('old'))
+            new_ver = int(m.group('new'))
+            network_data['vampire_events'].append({
+                'timestamp': timestamp,
+                'type': 'VERSION_MANIPULATION',
+                'old_version': old_ver,
+                'new_version': new_ver,
+                'message': f"Version manipulation: {old_ver} → {new_ver}"
+            })
+            return
+        
+        # Parse STRETCH RANK MANIPULATION
+        m = LOG_PATTERNS['vampire_stretch'].search(line)
+        if m:
+            old_rank = int(m.group('old'))
+            new_rank = int(m.group('new'))
+            network_data['vampire_events'].append({
+                'timestamp': timestamp,
+                'type': 'RANK_MANIPULATION',
+                'old_rank': old_rank,
+                'new_rank': new_rank,
+                'message': f"Rank manipulation: {old_rank} → {new_rank} (Malicious: {new_rank >= 1500})"
+            })
+            logger.warning(f"⚠️  Stretch rank manipulation: {old_rank} → {new_rank}")
+            return
+        
+        # Parse ML DEFENSE ALERTS (from vampire_defense_ml.c MONITOR MODE)
+        m = LOG_PATTERNS['ml_alert'].search(line)
+        if m:
+            network_data['ml_defense_events'].append({
+                'timestamp': timestamp,
+                'detector_id': int(m.group('detector')),
+                'suspect_addr': m.group('suspect').strip(),
+                'attack_type': m.group('type'),
+                'detection_source': m.group('source'),
+                'consecutive_alerts': int(m.group('alerts')),
+                'features': {
+                    'dio_rate': int(m.group('dio_rate')),
+                    'version_delta': int(m.group('version_delta')),
+                    'rank': int(m.group('rank')),
+                    'rank_delta': int(m.group('rank_delta')),
+                    'is_poison': int(m.group('is_poison')),
+                },
+                'message': f"ML {m.group('source')}: {m.group('type')} detected "
+                           f"(DIO rate={m.group('dio_rate')}, alerts={m.group('alerts')})"
+            })
+            logger.warning(f"🛡️ ML_ALERT: {m.group('type')} from detector {m.group('detector')} "
+                          f"suspect={m.group('suspect')} source={m.group('source')}")
+            return
+        
+        # Parse GLOBAL REPAIR
+        m = LOG_PATTERNS['global_repair'].search(line)
+        if m:
+            network_data['global_repairs'] += 1
+            if network_data['global_repairs'] % 5 == 0:  # Log every 5 repairs
+                logger.warning(f"⚠️  Global repairs: {network_data['global_repairs']} (network instability!)")
+            return
+        
+        # Parse RANK from STATUS messages (update rank tracking)
+        m = LOG_PATTERNS['rank_status'].search(line)
+        if m:
+            node_id = int(m.group('node'))
+            rank = int(m.group('rank'))
+            if node_id in network_data['nodes']:
+                network_data['nodes'][node_id]['rank'] = rank
+                
+                # Update cluster avg rank
+                cluster = network_data['nodes'][node_id].get('cluster')
+                if cluster in [1, 2]:
+                    cluster_nodes = [n for n in network_data['nodes'].values() 
+                                   if n.get('cluster') == cluster and 'rank' in n and n.get('is_alive', True)]
+                    if cluster_nodes:
+                        network_data['cluster_stats'][cluster]['avg_rank'] = sum(n['rank'] for n in cluster_nodes) / len(cluster_nodes)
+            return
     
     def stop(self):
         self.running = False
@@ -419,6 +530,11 @@ def get_network_data():
     avg_energy_c1 = sum(n['energy_mj'] for n in c1_nodes) / len(c1_nodes) if c1_nodes else 0
     avg_energy_c2 = sum(n['energy_mj'] for n in c2_nodes) / len(c2_nodes) if c2_nodes else 0
     
+    # Calculate avg rank per cluster
+    avg_rank_c1 = network_data['cluster_stats'][1].get('avg_rank', 0)
+    avg_rank_c2 = network_data['cluster_stats'][2].get('avg_rank', 0)
+    overall_avg_rank = (avg_rank_c1 + avg_rank_c2) / 2 if (avg_rank_c1 > 0 or avg_rank_c2 > 0) else 0
+    
     return jsonify({
         'timestamp': network_data['timestamp'],
         'sink_id': network_data['sink_id'],
@@ -432,11 +548,23 @@ def get_network_data():
         'pdr': (network_data['total_packets_received'] / network_data['total_packets_sent'] * 100) 
                if network_data['total_packets_sent'] > 0 else 0,
         'cluster_stats': {
-            1: {'avg_energy': avg_energy_c1, 'parent_switches': network_data['cluster_stats'][1]['parent_switches']},
-            2: {'avg_energy': avg_energy_c2, 'parent_switches': network_data['cluster_stats'][2]['parent_switches']}
+            1: {
+                'avg_energy': avg_energy_c1, 
+                'parent_switches': network_data['cluster_stats'][1]['parent_switches'],
+                'avg_rank': avg_rank_c1
+            },
+            2: {
+                'avg_energy': avg_energy_c2, 
+                'parent_switches': network_data['cluster_stats'][2]['parent_switches'],
+                'avg_rank': avg_rank_c2
+            }
         },
         'vna_events': list(network_data['vna_events']),
         'sybil_events': list(network_data.get('sybil_events', set())),
+        'vampire_events': list(network_data.get('vampire_events', [])),  # Vampire attacks
+        'ml_defense_events': list(network_data.get('ml_defense_events', [])),  # ML defense alerts
+        'global_repairs': network_data.get('global_repairs', 0),  # Global repair count
+        'avg_rank': overall_avg_rank,  # Overall network rank
         'nodes': [
             {
                 'node_id': node_id,

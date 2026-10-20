@@ -63,6 +63,7 @@ PROCESS_THREAD(vampire_carousel_process, ev, data)
   LOG_INFO("============================================\n");
   LOG_INFO("VAMPIRE ATTACK: CAROUSEL ATTACK ACTIVATED\n");
   LOG_INFO("Attack strategy: Version manipulation + DIO flooding\n");
+  LOG_INFO("TAG: ATTACK_TYPE=CAROUSEL\n");
   LOG_INFO("============================================\n");
   
   etimer_set(&send_timer, NORMAL_SEND_INTERVAL);
@@ -78,7 +79,7 @@ PROCESS_THREAD(vampire_carousel_process, ev, data)
             uint8_t old_version = curr_instance.dag.version;
             curr_instance.dag.version += 10;  // Aggressive version increment
             
-            LOG_INFO("CAROUSEL_ATTACK version_manipulation: %u -> %u (attack #%lu)\n", 
+            LOG_INFO("CAROUSEL_ATTACK version_manipulation: %u -> %u (attack #%lu) TAG:ACTION=VERSION_MANIP\n", 
                      old_version, curr_instance.dag.version, (unsigned long)++attack_count);
             
             rpl_icmp6_dio_output(NULL);

@@ -1,222 +1,317 @@
 #!/usr/bin/env python3
 """
-Convert trained model sang C code cho Contiki-NG
-Hỗ trợ cả HistGradientBoostingClassifier và DecisionTree
+convert_to_c.py
+================
+Chuyen doi DecisionTree da train thanh C code cho Contiki-NG.
+
+Doc model tu model_vampire_dt.joblib (do train_and_export.py tao ra),
+duyet TOAN BO cay quyet dinh va sinh ra file C header voi:
+  - Cac hang so index feature
+  - Ham detect_vampire_attack() (chuoi if/else tu model that)
+  - Ham vampire_detect_confidence() (tinh diem do tin cay)
+  - Mang ATTACK_NAMES[]
+
+Usage (chay tu thu muc src/):
+  python ml/convert_to_c.py
+  python ml/convert_to_c.py --model ml/model_vampire_dt.joblib --output defense/vampire_detector.h
 """
 
-import joblib
+import argparse
+import json
+import os
 import sys
+import numpy as np
+import joblib
 from pathlib import Path
 
-# Try import micromlgen
-try:
-    from micromlgen import port
-    HAS_MICROMLGEN = True
-except ImportError:
-    HAS_MICROMLGEN = False
-    print("⚠️  WARNING: micromlgen not installed")
-    print("   Install: pip install micromlgen")
-    print()
+TREE_UNDEFINED = -2  # sklearn uses _tree.TREE_UNDEFINED = -2
 
-def load_model(model_path='model_node_level.joblib'):
-    """Load trained model"""
-    if not Path(model_path).exists():
-        print(f"❌ ERROR: Model file not found: {model_path}")
-        print("\nAvailable model files:")
-        for p in Path('.').glob('*.joblib'):
-            print(f"  - {p}")
-        for p in Path('.').glob('*.pkl'):
-            print(f"  - {p}")
-        sys.exit(1)
-    
-    clf = joblib.load(model_path)
-    return clf
 
-def get_feature_info(feature_cols):
-    """Map feature columns to C-compatible info"""
-    feature_map = {
-        'dio_tx_count': {'name': 'dio_tx', 'desc': 'DIO messages sent in window'},
-        'dio_rx_count': {'name': 'dio_rx', 'desc': 'DIO messages received'},
-        'dao_tx_count': {'name': 'dao_tx', 'desc': 'DAO messages sent'},
-        'dao_rx_count': {'name': 'dao_rx', 'desc': 'DAO messages received'},
-        'global_repair_count': {'name': 'global_repair', 'desc': 'Global repair triggers'},
-        'local_repair_count': {'name': 'local_repair', 'desc': 'Local repair triggers'},
-        'parent_switch_count': {'name': 'parent_switch', 'desc': 'Parent switching count'},
-        'distinct_dio_versions_seen': {'name': 'dio_versions', 'desc': 'Distinct DIO versions seen'},
-        'rank_last': {'name': 'rank', 'desc': 'Last RPL rank value'},
-        'rank_std': {'name': 'rank_std', 'desc': 'Rank standard deviation'},
-        'infinite_rank_count': {'name': 'inf_rank', 'desc': 'Infinite rank occurrences'},
-    }
-    
-    features = []
-    for i, col in enumerate(feature_cols):
-        if col in feature_map:
-            info = feature_map[col]
-            features.append(f"  //   [{i}] {info['name']:<15s} : {info['desc']}")
+def tree_to_c_ifelse(tree, feature_names, class_names=None, threshold=0.5):
+    """Duyet cay quyet dinh cua sklearn va sinh chuoi if/else C code voi calibrated threshold."""
+    tree_ = tree.tree_
+    if class_names is None:
+        class_names = ['NORMAL', 'VAMPIRE']
+
+    lines = []
+
+    def recurse(node, depth):
+        indent = "    " * (depth + 1)
+
+        if tree_.feature[node] != TREE_UNDEFINED:
+            # Node trung gian (internal node) -> sinh if/else
+            feat_idx = tree_.feature[node]
+            feat_name = feature_names[feat_idx] if feat_idx < len(feature_names) else f"f{feat_idx}"
+            split_val = tree_.threshold[node]
+
+            # Dung so nguyen neu threshold gan so nguyen
+            if abs(split_val - round(split_val)) < 0.01:
+                thresh_str = str(int(round(split_val)))
+            else:
+                thresh_str = f"{split_val:.2f}"
+
+            lines.append(f"{indent}if (features[{feat_idx}] <= {thresh_str}) {{  /* {feat_name} */")
+            recurse(tree_.children_left[node], depth + 1)
+            lines.append(f"{indent}}} else {{")
+            recurse(tree_.children_right[node], depth + 1)
+            lines.append(f"{indent}}}")
         else:
-            features.append(f"  //   [{i}] {col:<15s} : (feature)")
-    
-    return '\n'.join(features)
+            # La node (leaf) -> return class theo calibrated decision threshold
+            value = tree_.value[node][0]
+            total = float(np.sum(value))
+            p_attack = float(value[1]) / total if total > 0 and len(value) > 1 else 0.0
+            class_idx = 1 if p_attack >= threshold else 0
+            conf_pct = int(round(p_attack * 100)) if class_idx == 1 else int(round((1.0 - p_attack) * 100))
+            class_name = class_names[class_idx] if class_idx < len(class_names) else f"CLASS_{class_idx}"
+            lines.append(f"{indent}return {class_idx};  /* {class_name} (p_attack={p_attack:.2f}, {conf_pct}% conf, {int(total)} samples) */")
 
-def generate_manual_c_code(clf, feature_cols):
-    """Generate manual C implementation when micromlgen not available"""
-    
-    n_features = len(feature_cols)
-    feature_info = get_feature_info(feature_cols)
-    
+    recurse(0, 0)
+    return "\n".join(lines)
+
+
+def get_used_features(tree, feature_names):
+    """Lay danh sach cac feature duoc su dung trong cay."""
+    tree_ = tree.tree_
+    used_indices = set()
+
+    def walk(node):
+        if tree_.feature[node] != TREE_UNDEFINED:
+            used_indices.add(tree_.feature[node])
+            walk(tree_.children_left[node])
+            walk(tree_.children_right[node])
+
+    walk(0)
+    used = [(idx, feature_names[idx]) for idx in sorted(used_indices) if idx < len(feature_names)]
+    return used
+
+
+def generate_c_header(tree, feature_names, class_names=None, threshold=0.5):
+    """Sinh toan bo noi dung file .h voi calibrated decision threshold."""
+    if class_names is None:
+        class_names = ['NORMAL', 'VAMPIRE']
+
+    n_features = len(feature_names)
+    used_features = get_used_features(tree, feature_names)
+    tree_code = tree_to_c_ifelse(tree, feature_names, class_names, threshold=threshold)
+
+    # Build feature index defines
+    feature_defines = []
+    for idx, name in enumerate(feature_names):
+        c_name = name.upper().replace(' ', '_')
+        marker = "  /* USED */" if idx in [u[0] for u in used_features] else ""
+        feature_defines.append(f"#define FEAT_{c_name:40s} {idx}{marker}")
+
+    feature_defines_str = "\n".join(feature_defines)
+    attack_names_entries = ", ".join([f'"{cn}"' for cn in class_names])
+    threshold_pct = int(round(threshold * 100))
+
     c_code = f"""/**
- * Vampire Attack Detector - Auto-generated from trained model
- * Model: {clf.__class__.__name__}
- * Features: {n_features}
- */
+ * Vampire Attack Detector - Auto-generated from trained DecisionTree
+ * ===================================================================
+ * DO NOT EDIT - This file was generated by convert_to_c.py
+ *
+ * Model: DecisionTreeClassifier
+ * Total features: {n_features}
+ * Features actually used by tree: {len(used_features)}
+ * Classes: {', '.join(class_names)}
+ * Calibrated Decision Threshold: {threshold:.2f} ({threshold_pct}%)
+ * Tree depth: {tree.get_depth()}
+ * Tree leaves: {tree.get_n_leaves()}
+ *
+ * Features used:
+"""
+    for idx, name in used_features:
+        c_code += f" *   [{idx}] {name}\n"
+
+    c_code += f""" */
 
 #ifndef VAMPIRE_DETECTOR_H
 #define VAMPIRE_DETECTOR_H
 
 #include <stdint.h>
 
-/**
- * Feature indices (total: {n_features})
-{feature_info}
- */
+/* ================================================================
+ * FEATURE INDICES
+ * Moi feature la 1 phan tu trong mang int16_t features[{n_features}]
+ * ================================================================ */
+{feature_defines_str}
 
-/**
- * Detect vampire attack based on extracted features
- * 
- * @param features Array of {n_features} int16_t features
- * @return 1 if vampire detected, 0 if normal
- */
+#define VAMPIRE_NUM_FEATURES {n_features}
+
+/* Calibrated decision threshold (0-100) */
+#define VAMPIRE_DECISION_THRESHOLD_PCT {threshold_pct}
+
+#if defined(__GNUC__) || defined(__clang__)
+static const char *ATTACK_NAMES[] __attribute__((unused)) = {{{attack_names_entries}}};
+#else
+static const char *ATTACK_NAMES[] = {{{attack_names_entries}}};
+#endif
+
+/* ================================================================
+ * DETECTION FUNCTION
+ * Tra ve: 0 = NORMAL, 1 = VAMPIRE DETECTED
+ *
+ * Day la cay quyet dinh THAT duoc train tu du lieu simulation.
+ * Nguong quyet dinh da duoc toi uu hoa: threshold = {threshold:.2f} ({threshold_pct}%)
+ * Tham so: features[] - mang {n_features} phan tu int16_t
+ * ================================================================ */
+static inline int detect_vampire_attack(const int16_t *features) {{
+{tree_code}
+}}
+
+/* ================================================================
+ * CONFIDENCE SCORE (0-100)
+ * Tinh diem do tin cay dua tren cac feature quan trong nhat
+ * ================================================================ */
+static inline int vampire_detect_confidence(const int16_t *features) {{
+    int score = 0;
+"""
+
+    # Generate confidence function from top used features
+    for idx, name in used_features[:5]:
+        tree_ = tree.tree_
+        thresholds = []
+        def find_thresholds(node):
+            if tree_.feature[node] == idx:
+                thresholds.append(tree_.threshold[node])
+            if tree_.feature[node] != TREE_UNDEFINED:
+                find_thresholds(tree_.children_left[node])
+                find_thresholds(tree_.children_right[node])
+        find_thresholds(0)
+
+        if thresholds:
+            med_thresh = int(np.median(thresholds))
+            c_code += f"\n    /* {name} */\n"
+            c_code += f"    if (features[{idx}] > {med_thresh}) score += {100 // len(used_features[:5])};\n"
+
+    c_code += f"""
+    return (score > 100) ? 100 : score;
+}}
+
+/* ================================================================
+ * SIMPLIFIED 3-FEATURE DETECTION (backward compatible)
+ * ================================================================ */
 static inline int vampire_detect(int16_t *features) {{
-    // Simplified decision rules based on feature importance
-    // (For full model, install micromlgen and re-run)
-    
-    int16_t dio_tx = features[0];  // dio_tx_count
-    
-    // Simple threshold-based detection
-    // Adjust these thresholds based on your network characteristics
-    
-    // Rule 1: High DIO transmission rate
-    if (dio_tx > 30) {{
-        return 1; // Likely vampire attack (DIO flooding)
-    }}
-    
-    // Rule 2: Check for other suspicious patterns
-    // (Add more rules based on feature importance from training)
-    
-    return 0; // Normal behavior
+    return detect_vampire_attack(features);
 }}
 
 #endif /* VAMPIRE_DETECTOR_H */
 """
-    
     return c_code
 
-def convert_to_c(model_path='model_node_level.joblib', output_path='../defense/vampire_detector.h'):
-    """Main conversion function"""
-    
-    print("=" * 70)
-    print("CONVERTING MODEL TO C CODE")
-    print("=" * 70)
-    print()
-    
-    # Load model
-    print(f"Loading model: {model_path}")
-    clf = joblib.load(model_path)
-    
-    # Get feature information
-    if hasattr(clf, 'n_features_in_'):
-        n_features = clf.n_features_in_
-        print(f"Number of features: {n_features}")
-    else:
-        print("⚠️  Cannot determine number of features from model")
-        n_features = None
-    
-    # Try to get feature names
-    feature_cols = []
-    if hasattr(clf, 'feature_names_in_'):
-        feature_cols = list(clf.feature_names_in_)
-        print(f"Feature names found: {len(feature_cols)}")
-    else:
-        # Try to load from separate file
-        feature_file = Path('feature_names.txt')
-        if feature_file.exists():
-            feature_cols = feature_file.read_text().strip().split(',')
-            print(f"Loaded {len(feature_cols)} feature names from {feature_file}")
-    
-    if not feature_cols and n_features:
-        feature_cols = [f'feature_{i}' for i in range(n_features)]
-        print(f"Generated generic feature names: {len(feature_cols)}")
-    
-    print(f"Model type: {clf.__class__.__name__}")
-    print()
-    
-    # Convert based on model type
-    if HAS_MICROMLGEN and clf.__class__.__name__ in ['DecisionTreeClassifier', 'RandomForestClassifier']:
-        print("✅ Using micromlgen for optimized C code generation...")
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument('--model', default='ml/model_vampire_dt.joblib',
+                    help="Duong dan file model DecisionTree")
+    ap.add_argument('--features', default='ml/model_feature_cols.joblib',
+                    help="Duong dan file danh sach feature")
+    ap.add_argument('--metadata', default='ml/model_metadata.json',
+                    help="Duong dan file metadata JSON")
+    ap.add_argument('--threshold', type=float, default=None,
+                    help="Gia tri threshold tuy chinh (0.0 - 1.0). Neu khong chi dinh se doc tu metadata.")
+    ap.add_argument('--output', default='defense/vampire_detector.h',
+                    help="Duong dan file C output")
+    args = ap.parse_args()
+
+    print(f"{'='*60}")
+    print(f"   CHUYEN DOI MODEL SANG C CODE (CONTIKI-NG)")
+    print(f"{'='*60}")
+
+    # Tu dong phat hien duong dan neu chay tu src/ hoac src/ml/
+    model_path = args.model
+    if not os.path.exists(model_path):
+        for cand in ['ml/output/model_vampire_dt.joblib', 'output/model_vampire_dt.joblib', 'ml/model_vampire_dt.joblib', 'model_vampire_dt.joblib']:
+            if os.path.exists(cand):
+                model_path = cand
+                break
+
+    features_path = args.features
+    if not os.path.exists(features_path):
+        for cand in ['ml/output/model_feature_cols.joblib', 'output/model_feature_cols.joblib', 'ml/model_feature_cols.joblib', 'model_feature_cols.joblib']:
+            if os.path.exists(cand):
+                features_path = cand
+                break
+
+    meta_path = args.metadata
+    if not os.path.exists(meta_path):
+        for cand in ['ml/output/model_metadata.json', 'output/model_metadata.json', 'ml/model_metadata.json', 'model_metadata.json']:
+            if os.path.exists(cand):
+                meta_path = cand
+                break
+
+    if not os.path.exists(model_path):
+        print(f"\n  [LOI] Khong tim thay model: {args.model}")
+        print(f"  Ban can chay train_and_export.py truoc!")
+        sys.exit(1)
+
+    if not os.path.exists(features_path):
+        print(f"\n  [LOI] Khong tim thay feature list: {args.features}")
+        sys.exit(1)
+
+    # Nhan threshold tu metadata neu co
+    threshold = args.threshold
+    if threshold is None and os.path.exists(meta_path):
         try:
-            c_code = port(clf, classmap={0: 'NORMAL', 1: 'VAMPIRE'})
-            
-            # Wrap code
-            header = f"""/**
- * Vampire Attack Detector - Generated by micromlgen
- * Model: {clf.__class__.__name__}
- * Features: {len(feature_cols)}
-{get_feature_info(feature_cols)}
- */
-
-#ifndef VAMPIRE_DETECTOR_H
-#define VAMPIRE_DETECTOR_H
-
-#include <stdint.h>
-
-"""
-            footer = "\n#endif /* VAMPIRE_DETECTOR_H */\n"
-            
-            # Customize function signature
-            c_code = c_code.replace('int predict(', 'int vampire_detect(')
-            c_code = c_code.replace('float *x', 'int16_t *features')
-            c_code = c_code.replace('x[', 'features[')
-            
-            full_code = header + c_code + footer
-            
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+                threshold = float(meta.get('optimal_threshold', 0.5))
+                print(f"  Loaded calibrated threshold tu '{meta_path}': {threshold:.2f}")
         except Exception as e:
-            print(f"⚠️  micromlgen failed: {e}")
-            print("   Falling back to manual implementation...")
-            full_code = generate_manual_c_code(clf, feature_cols)
-    
-    else:
-        print(f"ℹ️  Model type {clf.__class__.__name__} not supported by micromlgen")
-        print("   Generating manual C implementation...")
-        full_code = generate_manual_c_code(clf, feature_cols)
-    
+            threshold = 0.5
+    if threshold is None:
+        threshold = 0.5
+
+    print(f"\n  Loading model            : {model_path}")
+    print(f"  Decision Threshold       : {threshold:.2f} ({int(round(threshold*100))}%)")
+    dt = joblib.load(model_path)
+    feature_cols = joblib.load(features_path)
+    print(f"  Model type               : {dt.__class__.__name__}")
+    print(f"  Features                 : {len(feature_cols)}")
+    print(f"  Tree depth               : {dt.get_depth()}")
+    print(f"  Tree leaves              : {dt.get_n_leaves()}")
+
+    # Generate C code
+    class_names = ['NORMAL', 'VAMPIRE']
+    c_code = generate_c_header(dt, feature_cols, class_names, threshold=threshold)
+
     # Write output
-    output_path = Path(output_path)
+    output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(full_code)
-    
-    print()
-    print("=" * 70)
-    print("✅ SUCCESS")
-    print("=" * 70)
-    print(f"Output: {output_path}")
-    print()
-    print("Usage in Contiki-NG:")
-    print("""
-    #include "vampire_detector.h"
-    
-    int16_t features[N];  // N = number of features
-    // ... populate features from RPL metrics ...
-    
-    int result = vampire_detect(features);
-    if (result == 1) {
-        LOG_WARN("Vampire attack detected!\\n");
-        // Add to ACL blacklist
-    }
-""")
-    print("=" * 70)
+    output_path.write_text(c_code, encoding='utf-8')
+
+    # Dong bo ca 2 vi tri (defense/ cho Contiki-NG va ml/defense/)
+    if args.output == 'defense/vampire_detector.h':
+        if Path('ml').is_dir():
+            alt_path = Path('ml/defense/vampire_detector.h')
+            alt_path.parent.mkdir(parents=True, exist_ok=True)
+            alt_path.write_text(c_code, encoding='utf-8')
+        elif Path('../defense').is_dir():
+            alt_path = Path('../defense/vampire_detector.h')
+            alt_path.parent.mkdir(parents=True, exist_ok=True)
+            alt_path.write_text(c_code, encoding='utf-8')
+
+    used = get_used_features(dt, feature_cols)
+    print(f"\n  Features used by tree    : {len(used)}/{len(feature_cols)}")
+    for idx, name in used:
+        print(f"    [{idx}] {name}")
+
+    print(f"\n  Output header            : {args.output}")
+    print(f"  Size                     : {len(c_code):,} bytes")
+
+    print(f"\n{'='*60}")
+    print(f"   HOAN THANH!")
+    print(f"{'='*60}")
+    print(f"\n  File {args.output} da duoc tao thanh cong.")
+    print(f"  Nhung truc tiep vao WSN Contiki-NG:")
+    print(f"    #include \"vampire_detector.h\"")
+    print(f"    int16_t features[VAMPIRE_NUM_FEATURES] = {{0}};")
+    print(f"    int result = detect_vampire_attack(features);")
+    print(f"{'='*60}")
+
 
 if __name__ == '__main__':
-    model_path = sys.argv[1] if len(sys.argv) > 1 else 'model_node_level.joblib'
-    output_path = sys.argv[2] if len(sys.argv) > 2 else '../defense/vampire_detector.h'
-    
-    convert_to_c(model_path, output_path)
+    main()

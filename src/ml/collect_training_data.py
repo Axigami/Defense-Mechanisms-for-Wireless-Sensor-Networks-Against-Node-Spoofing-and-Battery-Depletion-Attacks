@@ -4,21 +4,12 @@ collect_training_data.py
 Parse log Contiki-NG/Cooja (dinh dang: "<time> ID:<node> [LEVEL: MODULE] message")
 va trich xuat bang feature theo cua so thoi gian (windowed features) de train ML
 phat hien vampire attack (RPL Version Number Attack) trong WSN.
-
-CACH DUNG NHANH:
-    python3 extract_features.py data/logs/run_vampire.log --scenario vampire --out features_vampire.csv
-    python3 extract_features.py data/logs/run_baseline.log --scenario normal --out features_normal.csv
-    # roi gop nhieu file features_*.csv lai (pd.concat) truoc khi train
-
-QUAN TRONG - TRANH DATA LEAKAGE:
-    Cot ket thuc bang "_GROUNDTRUTH" (vi du is_attacker_node_GROUNDTRUTH) CHI dung de:
-      (1) kiem tra / debug, (2) xay dung nhan (label) khi ban KHONG chay rieng scenario baseline.
-    TUYET DOI KHONG dua cac cot nay vao tap feature X khi train model — vi mot he thong
-    phat hien that ngoai doi KHONG the biet truoc "node nao la ke tan cong" (do la thu no
-    dang can du doan!). Neu dua vao X, model se "ăn gian" va khong generalize duoc.
 """
 import argparse
+import glob
+import os
 import re
+from pathlib import Path
 import numpy as np
 import pandas as pd
 
@@ -47,8 +38,8 @@ RE_NBR_STATE = re.compile(
 # Neu Cooja/board cua ban dung don vi timestamp khac, chinh lai o day.
 # Voi log mau: dong dau ~26000, dong cuoi ~1.34e9 -> phu hop voi don vi MICROGIAY (us).
 TIME_UNIT_PER_SEC = 1_000_000
-WINDOW_SEC = 10          # do rong cua so thoi gian de gom feature (giay)
-AFTERMATH_SEC = 5        # chi dung khi KHONG co scenario baseline rieng (xem ham label_attack_windows)
+WINDOW_SEC = 60          # do rong cua so thoi gian de gom feature (giay, dong bo voi 60s tren Contiki-NG)
+AFTERMATH_SEC = 15       # chi dung khi KHONG co scenario baseline rieng (xem ham label_attack_windows)
 
 
 def parse_log(path: str) -> pd.DataFrame:
@@ -84,6 +75,10 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df['is_queue_flush'] = df['msg'].str.contains('flushing packet', regex=False)
     df['is_not_assoc'] = df['msg'].str.contains('not associated', regex=False)
     df['is_vna_trigger'] = df['msg'].str.contains('ATTACK_VNA: Triggered', regex=False)  # CHI de danh nhan / debug
+    
+    # Detect coordinated attack phases and actions from tags
+    df['attack_phase'] = df['msg'].str.extract(r'TAG:PHASE=(\w+)', expand=False)
+    df['attack_action'] = df['msg'].str.extract(r'TAG:ACTION=(\w+)', expand=False)
 
     df = pd.concat([df, df['msg'].str.extract(RE_SINK_RX).add_prefix('sinkrx_')], axis=1)
     df = pd.concat([df, df['msg'].str.extract(RE_NODE_TX).add_prefix('tx_')], axis=1)
@@ -92,7 +87,36 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def build_node_window_features(df: pd.DataFrame, window_sec=WINDOW_SEC, time_unit_per_sec=TIME_UNIT_PER_SEC):
+def determine_attacker_nodes(scenario: str, logfile: str = '', df: pd.DataFrame = None, override=None) -> list:
+    """Xac dinh danh sach cac node tan cong (ground truth) theo kich ban:
+    - normal: khong co attacker ([]).
+    - coordinated: [29, 30, 31].
+    - carousel / stretch / stealth / vampire: [29].
+    """
+    if override is not None:
+        return sorted(list(set(override)))
+
+    scenario_lower = (scenario or '').lower().strip()
+    logfile_lower = (logfile or '').lower().replace('\\', '/')
+
+    # 1. Kich ban normal: TUYET DOI khong co node tan cong
+    if scenario_lower == 'normal' or 'normal' in logfile_lower:
+        return []
+
+    # 2. Kich ban coordinated attack: 3 node tan cong 29, 30, 31
+    if 'coordinated' in scenario_lower or 'coordinated' in logfile_lower:
+        return [29, 30, 31]
+
+    if df is not None and not df.empty and 'msg' in df.columns:
+        if df['msg'].str.contains('COORDINATED', case=False, na=False).any():
+            return [29, 30, 31]
+
+    # 3. Cac kich ban con lai (carousel, stretch, stealth, vampire mac dinh): chi co node 29
+    return [29]
+
+
+def build_node_window_features(df: pd.DataFrame, window_sec=WINDOW_SEC, time_unit_per_sec=TIME_UNIT_PER_SEC,
+                               attacker_nodes_override=None, scenario='vampire', logfile=''):
     """Feature theo tung (node, cua_so_thoi_gian). Dung de: phat hien + KHOANH VUNG node nghi van."""
     win = window_sec * time_unit_per_sec
     df = df.copy()
@@ -164,14 +188,82 @@ def build_node_window_features(df: pd.DataFrame, window_sec=WINDOW_SEC, time_uni
     feat['delivered_count'] = rx_rows.groupby(['node', 'window']).size().reindex(idx, fill_value=0)
     feat['avg_latency_ms'] = rx_rows.groupby(['node', 'window'])['sinkrx_latency_ms'].mean().reindex(idx)
 
-    # ----- CHI DE LAM GROUND-TRUTH / DEBUG, KHONG DUA VAO FEATURE X KHI TRAIN -----
-    # Identify attacker nodes by their log module
-    # Attack modules: VAMPIRE, CAROUSEL, STRETCH, HYBRID, STEALTH
-    attack_modules = ['VAMPIRE', 'CAROUSEL', 'STRETCH', 'HYBRID', 'STEALTH']
-    attacker_nodes = df.loc[df['module'].isin(attack_modules), 'node'].unique().tolist()
-    feat['is_attacker_node_GROUNDTRUTH'] = feat.index.get_level_values('node').isin(attacker_nodes).astype(int)
+    # -------------------------------------------------------------------------
+    # LOCAL EMBEDDED FEATURES (observable on-board by a sensor node in Contiki-NG)
+    # -------------------------------------------------------------------------
+    # 1. dio_rate: Number of DIOs transmitted/observed in the window (normalized to 60s)
+    feat['dio_rate'] = feat['dio_tx_count']
+    # If a node only receives DIOs, dio_rx_count can also serve as observation:
+    feat['dio_rate'] = feat['dio_rate'].fillna(0).astype(int)
 
-    return feat.reset_index(), attacker_nodes
+    # 2. version_delta: Discrepancy in RPL DAG versions
+    # In normal operation, DAG version is constant. In Vampire (version attack), version jumps.
+    if 'distinct_dio_versions_seen' in feat.columns:
+        feat['version_delta'] = (feat['distinct_dio_versions_seen'] - 1).clip(lower=0)
+    else:
+        feat['version_delta'] = 0
+
+    # 3. rank: Advertised RPL rank (normal range ~128 - 2000, 65535 is infinite)
+    feat['rank'] = feat['rank_last'].fillna(1000).astype(int)
+
+    # 4. rank_delta: Magnitude of rank fluctuation / sudden changes
+    rank_diff = feat.groupby(level='node')['rank'].diff().abs()
+    feat['rank_delta'] = rank_diff.fillna(feat['rank_std'].fillna(0)).astype(int)
+
+    # 5. is_poison: Node advertised or received infinite rank (sentinel for DAG repair/poisoning)
+    feat['is_poison'] = ((feat['infinite_rank_count'] > 0) | (feat['poison_dio_recv_count'] > 0)).astype(int)
+
+    # ----- CHI DE LAM GROUND-TRUTH / DEBUG, KHONG DUA VAO FEATURE X KHI TRAIN -----
+    all_attackers = determine_attacker_nodes(
+        scenario=scenario, logfile=logfile, df=df, override=attacker_nodes_override
+    )
+    feat['is_attacker_node_GROUNDTRUTH'] = feat.index.get_level_values('node').isin(all_attackers).astype(int)
+    
+    # Add attack type information for each node-window
+    if not all_attackers or (scenario and scenario.lower() == 'normal'):
+        feat['attack_type_GROUNDTRUTH'] = 'NONE'
+    else:
+        sc_lower = (scenario or '').lower()
+        lf_lower = (logfile or '').lower().replace('\\', '/')
+        if 'coordinated' in sc_lower or 'coordinated' in lf_lower:
+            atk_type = 'COORDINATED'
+        elif 'carousel' in sc_lower or 'carousel' in lf_lower:
+            atk_type = 'CAROUSEL'
+        elif 'stretch' in sc_lower or 'stretch' in lf_lower:
+            atk_type = 'STRETCH'
+        elif 'stealth' in sc_lower or 'stealth' in lf_lower:
+            atk_type = 'STEALTH'
+        else:
+            atk_type = 'VAMPIRE'
+
+        feat['attack_type_GROUNDTRUTH'] = 'NONE'
+        feat.loc[feat['is_attacker_node_GROUNDTRUTH'] == 1, 'attack_type_GROUNDTRUTH'] = atk_type
+
+    # For coordinated attacks: track phase distribution in each window
+    phase_rows = df.loc[df['attack_phase'].notna()]
+    if not phase_rows.empty and 'COORDINATED' in feat['attack_type_GROUNDTRUTH'].values:
+        phase_counts = phase_rows.groupby(['node', 'window', 'attack_phase']).size().unstack(fill_value=0)
+        for phase in ['CAROUSEL', 'STRETCH', 'IDLE']:
+            col_name = f'phase_{phase.lower()}_count_GROUNDTRUTH'
+            if phase in phase_counts.columns:
+                feat[col_name] = phase_counts[phase].reindex(idx, fill_value=0)
+            else:
+                feat[col_name] = 0
+    else:
+        for phase in ['carousel', 'stretch', 'idle']:
+            feat[f'phase_{phase}_count_GROUNDTRUTH'] = 0
+
+    # Track attack actions
+    action_rows = df.loc[df['attack_action'].notna()]
+    if not action_rows.empty and all_attackers:
+        for action in ['VERSION_MANIP', 'RANK_MANIP']:
+            action_count = action_rows[action_rows['attack_action'] == action].groupby(['node', 'window']).size()
+            feat[f'action_{action.lower()}_count_GROUNDTRUTH'] = action_count.reindex(idx, fill_value=0)
+    else:
+        for action in ['version_manip', 'rank_manip']:
+            feat[f'action_{action}_count_GROUNDTRUTH'] = 0
+
+    return feat.reset_index(), all_attackers
 
 
 def build_network_window_features(df: pd.DataFrame, window_sec=WINDOW_SEC, time_unit_per_sec=TIME_UNIT_PER_SEC):
@@ -232,7 +324,9 @@ def load_scenario(path: str, scenario: str, run_id: str, window_sec=WINDOW_SEC):
     de tranh leakage giua cac cua so cung 1 lan chay."""
     df = parse_log(path)
     df = enrich(df)
-    node_feat, attackers = build_node_window_features(df, window_sec=window_sec)
+    node_feat, attackers = build_node_window_features(
+        df, window_sec=window_sec, scenario=scenario, logfile=path
+    )
     node_feat['scenario'] = scenario          # 'normal' | 'sybil' | 'vampire' ...
     node_feat['run_id'] = run_id              # vd: ten file, hoac seed
     node_feat['label_network_attack'] = 0 if scenario == 'normal' else 1
@@ -240,37 +334,178 @@ def load_scenario(path: str, scenario: str, run_id: str, window_sec=WINDOW_SEC):
 
 
 if __name__ == '__main__':
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('logfile')
-    ap.add_argument('--scenario', default='vampire', help="'normal' | 'sybil' | 'vampire' (dat theo kich ban Cooja ban chay)")
-    ap.add_argument('--run-id', default='run1')
+    import os
+    from pathlib import Path
+
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Vi du su dung:
+  # Trich xuat log binh thuong (5 file):
+  python ml/collect_training_data.py data/logs/normal/run_1.log --scenario normal
+  python ml/collect_training_data.py data/logs/normal/run_2.log --scenario normal
+
+  # Trich xuat log co tan cong:
+  python ml/collect_training_data.py data/logs/vampire/run_1.log --scenario vampire
+
+  # Ket qua tu dong luu vao data/results/:
+  #   data/results/features_normal_run_1_node.csv
+  #   data/results/features_normal_run_1_network.csv
+  #   data/results/features_vampire_run_1_node.csv
+  #   ...
+
+  # Sau do chay train:
+  python ml/train_and_export.py
+        """
+    )
+    ap.add_argument('logfile', help="Duong dan file log, thu muc chua log, hoac glob pattern (vd: ../dataset/coordinated/ hoac run_1.log)")
+    ap.add_argument('--scenario', default='normal',
+                    help="'normal' | 'vampire' | 'sybil' | 'carousel' | 'stretch' | 'stealth' | 'coordinated'")
+    ap.add_argument('--run-id', default=None,
+                    help="ID cua run (mac dinh: tu dong lay tu ten file)")
     ap.add_argument('--window-sec', type=int, default=WINDOW_SEC)
-    ap.add_argument('--out-node', default='features_node_level.csv')
-    ap.add_argument('--out-network', default='features_network_level.csv')
+    ap.add_argument('--attacker-nodes', default=None,
+                    help="Danh sach node id tan cong, cach nhau boi dau phay (vd: 29,30,31,32)")
+    ap.add_argument('--split-runs', action='store_true',
+                    help="Luu tach rieng tung file theo run (mac dinh: tu dong gom chung vao features_{scenario}_node.csv)")
+    ap.add_argument('--out-dir', default='data/results',
+                    help="Thu muc luu ket qua CSV (mac dinh: data/results/)")
+    ap.add_argument('--out-node', default=None,
+                    help="Ten file CSV node-level (mac dinh: tu dong gom theo scenario)")
+    ap.add_argument('--out-network', default=None,
+                    help="Ten file CSV network-level (mac dinh: tu dong gom theo scenario)")
     args = ap.parse_args()
 
-    df = parse_log(args.logfile)
-    df = enrich(df)
+    override_attackers = None
+    if args.attacker_nodes:
+        override_attackers = [int(x.strip()) for x in args.attacker_nodes.split(',') if x.strip()]
 
-    node_feat, attackers = build_node_window_features(df, window_sec=args.window_sec)
-    node_feat['scenario'] = args.scenario
-    node_feat['run_id'] = args.run_id
+    os.makedirs(args.out_dir, exist_ok=True)
 
-    net_feat = build_network_window_features(df, window_sec=args.window_sec)
-    if args.scenario == 'normal':
-        net_feat['label_attack'] = 0
+    # --- Tim danh sach file log can xu ly (ho tro thu muc, glob pattern, file le) ---
+    p = Path(args.logfile)
+    if p.is_dir():
+        target_files = sorted(glob.glob(os.path.join(str(p), '*.log')))
+    elif any(ch in args.logfile for ch in ['*', '?']):
+        target_files = sorted(glob.glob(args.logfile))
     else:
-        trigger_times = df.loc[df['is_vna_trigger'], 'time'].tolist()
-        if trigger_times:
-            net_feat = label_attack_windows(net_feat, trigger_times, window_sec=args.window_sec)
+        target_files = [args.logfile]
+
+    if not target_files:
+        print(f"LOI: Khong tim thay file log nao khop voi '{args.logfile}'")
+        sys.exit(1)
+
+    # --- Dat ten file output (mac dinh gom chung theo scenario) ---
+    if args.out_node is None:
+        if args.split_runs and len(target_files) == 1:
+            run_tag = args.run_id or Path(target_files[0]).stem
+            args.out_node = os.path.join(args.out_dir, f"features_{args.scenario}_{run_tag}_node.csv")
         else:
-            net_feat['label_attack'] = 1  # ca file la kich ban tan cong nhung khong co dong VAMPIRE de doi chieu
+            args.out_node = os.path.join(args.out_dir, f"features_{args.scenario}_node.csv")
 
-    node_feat.to_csv(args.out_node, index=False)
-    net_feat.to_csv(args.out_network, index=False)
+    if args.out_network is None:
+        if args.split_runs and len(target_files) == 1:
+            run_tag = args.run_id or Path(target_files[0]).stem
+            args.out_network = os.path.join(args.out_dir, f"features_{args.scenario}_{run_tag}_network.csv")
+        else:
+            args.out_network = os.path.join(args.out_dir, f"features_{args.scenario}_network.csv")
 
-    print(f"[OK] {len(df)} dong log -> {node_feat.shape[0]} dong feature theo node, {net_feat.shape[0]} dong feature theo mang")
-    print(f"[OK] Node bi danh dau la ke tan cong (ground-truth, chi de kiem tra): {attackers}")
-    print(f"[OK] Da luu: {args.out_node}, {args.out_network}")
-    if 'label_attack' in net_feat.columns:
-        print(f"[OK] Phan bo nhan (network-level): {net_feat['label_attack'].value_counts().to_dict()}")
+    print(f"{'='*60}")
+    print(f"TRICH XUAT & GOM FEATURES TU LOG")
+    print(f"{'='*60}")
+    print(f"  Target       : {args.logfile} ({len(target_files)} file(s))")
+    print(f"  Scenario     : {args.scenario}")
+    print(f"  Window       : {args.window_sec}s")
+    print(f"  Output Node  : {args.out_node}")
+    print(f"  Output Net   : {args.out_network}")
+    print(f"{'='*60}")
+
+    all_node_dfs = []
+    all_net_dfs = []
+    total_parsed_lines = 0
+
+    for current_file in target_files:
+        current_run_id = Path(current_file).stem if args.run_id is None or len(target_files) > 1 else args.run_id
+        print(f"\n>> Dang xu ly: {os.path.basename(current_file)} (run_id: {current_run_id})...")
+
+        df = parse_log(current_file)
+        df = enrich(df)
+        total_parsed_lines += len(df)
+
+        node_feat, attackers = build_node_window_features(
+            df,
+            window_sec=args.window_sec,
+            attacker_nodes_override=override_attackers,
+            scenario=args.scenario,
+            logfile=current_file
+        )
+        node_feat['scenario'] = args.scenario
+        node_feat['run_id'] = current_run_id
+        node_feat['log_file'] = os.path.basename(current_file)
+
+        net_feat = build_network_window_features(df, window_sec=args.window_sec)
+        net_feat['scenario'] = args.scenario
+        net_feat['run_id'] = current_run_id
+        net_feat['log_file'] = os.path.basename(current_file)
+
+        if args.scenario.lower() == 'normal' or 'normal' in str(current_file).lower():
+            net_feat['label_attack'] = 0
+            node_feat['label_network_attack'] = 0
+        else:
+            trigger_times = df.loc[df['is_vna_trigger'], 'time'].tolist()
+            if trigger_times:
+                net_feat = label_attack_windows(net_feat, trigger_times, window_sec=args.window_sec)
+            else:
+                net_feat['label_attack'] = 1
+            node_feat['label_network_attack'] = 1
+
+        all_node_dfs.append(node_feat)
+        all_net_dfs.append(net_feat)
+        print(f"   -> {len(node_feat)} node windows, {len(net_feat)} net windows, Attackers: {attackers}")
+
+    # Gom cac dataframe lai
+    new_node_df = pd.concat(all_node_dfs, ignore_index=True)
+    new_net_df = pd.concat(all_net_dfs, ignore_index=True)
+
+    # Tu dong merge neu file da ton tai (ghi de cac run cu de tranh duplicate)
+    if not args.split_runs and os.path.exists(args.out_node):
+        try:
+            old_node_df = pd.read_csv(args.out_node)
+            incoming_runs = new_node_df['run_id'].unique()
+            if 'run_id' in old_node_df.columns:
+                old_node_df = old_node_df[~old_node_df['run_id'].isin(incoming_runs)]
+            final_node_df = pd.concat([old_node_df, new_node_df], ignore_index=True)
+        except Exception:
+            final_node_df = new_node_df
+    else:
+        final_node_df = new_node_df
+
+    if not args.split_runs and os.path.exists(args.out_network):
+        try:
+            old_net_df = pd.read_csv(args.out_network)
+            incoming_runs = new_net_df['run_id'].unique()
+            if 'run_id' in old_net_df.columns:
+                old_net_df = old_net_df[~old_net_df['run_id'].isin(incoming_runs)]
+            final_net_df = pd.concat([old_net_df, new_net_df], ignore_index=True)
+        except Exception:
+            final_net_df = new_net_df
+    else:
+        final_net_df = new_net_df
+
+    # --- Luu CSV ---
+    final_node_df.to_csv(args.out_node, index=False)
+    final_net_df.to_csv(args.out_network, index=False)
+
+    print(f"\n{'='*60}")
+    print(f"HOAN THANH!")
+    print(f"{'='*60}")
+    print(f"  {total_parsed_lines:,} dong log da parse tu {len(target_files)} file")
+    print(f"  {final_node_df.shape[0]:,} dong feature node-level trong: {args.out_node}")
+    print(f"  {final_net_df.shape[0]:,} dong feature network-level trong: {args.out_network}")
+    if 'run_id' in final_node_df.columns:
+        print(f"  Cac run da gom ({final_node_df['run_id'].nunique()} runs): {sorted(final_node_df['run_id'].unique())}")
+    if 'is_attacker_node_GROUNDTRUTH' in final_node_df.columns:
+        dist_node = final_node_df['is_attacker_node_GROUNDTRUTH'].value_counts().to_dict()
+        print(f"  Node labels: {dist_node}")
+    print(f"{'='*60}")
