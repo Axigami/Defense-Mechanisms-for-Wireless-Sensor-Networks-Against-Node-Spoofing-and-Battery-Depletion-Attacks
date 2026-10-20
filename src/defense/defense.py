@@ -8,9 +8,9 @@ import xml.etree.ElementTree as ET
 def load_topology_map(attacks_dir):
     try:
         # --- HARDCODED SCENARIO ---
-        target_csc = os.path.join(attacks_dir, "wsn-2sink-sybil.csc")
+        target_csc = os.path.join(attacks_dir, "wsn-2sink-hijacked.csc")
         if not os.path.exists(target_csc):
-            print("Could not find wsn-2sink-sybil.csc")
+            print("Could not find wsn-2sink-hijacked.csc")
             return {}
         
         print(f"Loading topology from: {os.path.basename(target_csc)}")
@@ -243,6 +243,9 @@ class DefenseSystem:
         self.latest_temps = {}
         self.temp_history = {}
         
+        # Attack Wave Awareness: track recent HIJACK/FDI blocks
+        self.hijack_block_log = []  # list of timestamps when nodes were blocked for HIJACK
+        
     def log_inference(self, inf_type, target_id, title, detail, color="#ffffff"):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
         inf_key = f"{inf_type}_{target_id}"
@@ -449,21 +452,50 @@ class DefenseSystem:
                     fdi_passed = False
                     attack_type = "HIJACK"
                     spatial_reason = f"HIJACK DETECTED: {hijack_reason}"
+                    self.hijack_block_log.append(time.time())
                     if not hasattr(self, 'hijack_alerted'): self.hijack_alerted = set()
                     if node_id not in self.hijack_alerted:
                         self.log_inference("FDI", node_id, f"\u2620 HIJACK DETECTED: NODE {node_id}",
                                            f"<b>Analysis:</b> After {observation_window}s window: {hijack_reason}<br><b>Conclusion:</b> Coordinated FDI Attack (Hijacked Cluster).<br><b>Action:</b> INSTANT BLOCK!", "#7f1d1d")
                         self.hijack_alerted.add(node_id)
                 elif len(hot_neighbors) >= 1:
-                    # At least 1 neighbor (in 15m) is on fire -> CONFIRMED
-                    hot_ids = [str(n[0]) for n in hot_neighbors[:5]]
-                    fdi_passed = True
-                    spatial_reason = f"TRUE FIRE CONFIRMED: {len(hot_neighbors)+1} nodes within 15m report fire (Node {', '.join(hot_ids)})"
-                    if not hasattr(self, 'true_fire_alerted'): self.true_fire_alerted = set()
-                    if node_id not in self.true_fire_alerted:
-                        self.log_inference("FIRE", node_id, f"\U0001f525 TRUE FIRE CONFIRMED: CLUSTER NODE {node_id}",
-                                           f"<b>Analysis:</b> After {observation_window}s window: Nodes {', '.join(hot_ids)} within 15m of Node {node_id} also report >60C. Gradient is natural.<br><b>Conclusion:</b> Localized spatial event, TRUE FIRE! System MAINTAINS 100% Trust.<br><b>Action:</b> FIRE ALERT!", "#ff4500")
-                        self.true_fire_alerted.add(node_id)
+                    # --- Attack Wave Awareness ---
+                    now_awa = time.time()
+                    recent_hijack_blocks = sum(1 for t in self.hijack_block_log if now_awa - t < 120.0)
+                    
+                    # If active attack wave (>=3 HIJACK blocks in 2 min),
+                    # require at least 1 innocent (non-suspect) hot neighbor
+                    all_suspects = True
+                    if recent_hijack_blocks >= 3:
+                        for hn, _ in hot_neighbors:
+                            if self.fire_warning_count.get(hn, 0) == 0:
+                                all_suspects = False
+                                break
+                    else:
+                        all_suspects = False
+                    
+                    if all_suspects and recent_hijack_blocks >= 3:
+                        # COLLUSION: All hot neighbors are suspects during attack wave
+                        fdi_passed = False
+                        attack_type = "HIJACK"
+                        suspect_ids = [str(n[0]) for n in hot_neighbors[:5]]
+                        spatial_reason = f"COLLUSION DETECTED: All {len(hot_neighbors)} hot neighbors are suspects during attack wave ({recent_hijack_blocks} recent blocks)"
+                        self.hijack_block_log.append(time.time())
+                        if not hasattr(self, 'hijack_alerted'): self.hijack_alerted = set()
+                        if node_id not in self.hijack_alerted:
+                            self.log_inference("FDI", node_id, f"\u2620 COLLUSION DETECTED: NODE {node_id}",
+                                               f"<b>Analysis:</b> After {observation_window}s window: Active attack wave ({recent_hijack_blocks} nodes blocked recently). Hot neighbors [{', '.join(suspect_ids)}] are ALL under fire observation.<br><b>Conclusion:</b> Mutual vouching between suspects. No innocent witness.<br><b>Action:</b> INSTANT BLOCK!", "#7f1d1d")
+                            self.hijack_alerted.add(node_id)
+                    else:
+                        # Normal TRUE FIRE (no attack wave, or has innocent witnesses)
+                        hot_ids = [str(n[0]) for n in hot_neighbors[:5]]
+                        fdi_passed = True
+                        spatial_reason = f"TRUE FIRE CONFIRMED: {len(hot_neighbors)+1} nodes within 15m report fire (Node {', '.join(hot_ids)})"
+                        if not hasattr(self, 'true_fire_alerted'): self.true_fire_alerted = set()
+                        if node_id not in self.true_fire_alerted:
+                            self.log_inference("FIRE", node_id, f"\U0001f525 TRUE FIRE CONFIRMED: CLUSTER NODE {node_id}",
+                                               f"<b>Analysis:</b> After {observation_window}s window: Nodes {', '.join(hot_ids)} within 15m of Node {node_id} also report >60C. Gradient is natural.<br><b>Conclusion:</b> Localized spatial event, TRUE FIRE! System MAINTAINS 100% Trust.<br><b>Action:</b> FIRE ALERT!", "#ff4500")
+                            self.true_fire_alerted.add(node_id)
                 else:
                     # No neighbors confirmed after observation window
                     spatial_reason = f"No nodes within 15m confirmed fire after {observation_window}s window"
