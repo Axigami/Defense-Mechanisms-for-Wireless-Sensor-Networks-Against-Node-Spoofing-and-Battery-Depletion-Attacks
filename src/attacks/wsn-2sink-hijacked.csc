@@ -18,7 +18,7 @@
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <description>Sink</description>
-      <source>[CONFIG_DIR]/nodes/sink.c</source>
+      <source>[CONFIG_DIR]/../nodes/sink.c</source>
       <commands>make sink.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
@@ -49,163 +49,13 @@
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
       <description>Sensor node</description>
-      <source>[CONFIG_DIR]/nodes/node.c</source>
+      <source>[CONFIG_DIR]/../nodes/node.c</source>
       <commands>make node.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRS232</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiClock</moteinterface>
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRadio</moteinterface>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="68.89152322298115" y="40.44626243343839" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>2</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="34.37905630933609" y="45.8364942463653" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>3</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="17.714975276232956" y="15.81307139061625" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>4</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="463.3994908691145" y="88.19260867576678" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>5</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="64.99811261867218" y="57.86502897661586" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>6</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="14.067148170870574" y="51.24664734892276" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>7</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="42.00564570502713" y="26.496378339901838" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>8</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="20.46300493168689" y="64.6258567608163" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>9</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="10.24" y="25.03" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>10</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="61.49331545498322" y="44.28117550359081" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>11</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="33.517631981423115" y="20.015023644221692" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>12</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="63.05386889776861" y="71.50360998109707" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>13</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="23.714703601014957" y="76.98604604525504" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>14</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="50.589056309336094" y="66.45111755035909" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>15</id>
-        </interface_config>
-      </mote>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="15.773621660098154" y="36.87915145866184" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>16</id>
-        </interface_config>
-      </mote>
       <mote>
         <interface_config>
           org.contikios.cooja.interfaces.Position
@@ -546,11 +396,182 @@
           <id>52</id>
         </interface_config>
       </mote>
+    <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="36.680537606431216" y="36.95848429573965" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>53</id>
+        </interface_config>
+      </mote>
     </motetype>
     <motetype>
       org.contikios.cooja.contikimote.ContikiMoteType
+      <description>Hijacked Node</description>
+      <source>[CONFIG_DIR]/../nodes/hijacked_node.c</source>
+      <commands>make hijacked_node.cooja TARGET=cooja</commands>
+      <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
+      <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiMoteID</moteinterface>
+      <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRS232</moteinterface>
+      <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiClock</moteinterface>
+      <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiRadio</moteinterface>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="68.89152322298115" y="40.44626243343839" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>2</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="34.37905630933609" y="45.8364942463653" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>3</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="17.714975276232956" y="15.81307139061625" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>4</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="463.3994908691145" y="88.19260867576678" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>5</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="64.99811261867218" y="57.86502897661586" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>6</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="14.067148170870574" y="51.24664734892276" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>7</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="42.00564570502713" y="26.496378339901838" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>8</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="20.46300493168689" y="64.6258567608163" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>9</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="10.24" y="25.03" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>10</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="61.49331545498322" y="44.28117550359081" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>11</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="33.517631981423115" y="20.015023644221692" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>12</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="63.05386889776861" y="71.50360998109707" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>13</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="23.714703601014957" y="76.98604604525504" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>14</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="50.589056309336094" y="66.45111755035909" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>15</id>
+        </interface_config>
+      </mote>
+      <mote>
+        <interface_config>
+          org.contikios.cooja.interfaces.Position
+          <pos x="15.773621660098154" y="36.87915145866184" z="0.0" />
+        </interface_config>
+        <interface_config>
+          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
+          <id>16</id>
+        </interface_config>
+      </mote>
+      </motetype>
+    <motetype>
+      org.contikios.cooja.contikimote.ContikiMoteType
       <description>Sybil node</description>
-      <source>[CONFIG_DIR]/nodes/sybil_node.c</source>
+      <source>[CONFIG_DIR]/../nodes/sybil_node.c</source>
       <commands>$(MAKE) -j$(CPUS) sybil_node.cooja TARGET=cooja</commands>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.interfaces.Battery</moteinterface>
@@ -568,33 +589,33 @@
       <moteinterface>org.contikios.cooja.contikimote.interfaces.ContikiEEPROM</moteinterface>
       <moteinterface>org.contikios.cooja.interfaces.Mote2MoteRelations</moteinterface>
       <moteinterface>org.contikios.cooja.interfaces.MoteAttributes</moteinterface>
-      <mote>
-        <interface_config>
-          org.contikios.cooja.interfaces.Position
-          <pos x="36.680537606431216" y="36.95848429573965" z="0.0" />
-        </interface_config>
-        <interface_config>
-          org.contikios.cooja.contikimote.interfaces.ContikiMoteID
-          <id>53</id>
-        </interface_config>
-      </mote>
-    </motetype>
+      </motetype>
   </simulation>
   <plugin>
     org.contikios.cooja.plugins.ScriptRunner
     <plugin_config>
-      <script>var FileWriter = Java.type("java.io.FileWriter");
-var FileReader = Java.type("java.io.FileReader");
-var BufferedReader = Java.type("java.io.BufferedReader");
-var File = Java.type("java.io.File");
+      <script>
+          var FileWriter = Java.type("java.io.FileWriter");
+          var BufferedReader = Java.type("java.io.BufferedReader");
+          var FileReader = Java.type("java.io.FileReader");
+          var File = Java.type("java.io.File");
 
-var fileIndex = 1;
-var lineCount = 0;
-var maxLines = 50000;
-var logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
-var cmdFile = new File("../../../data/logs/attack.cmd");
+          var fileIndex = 1;
+          var lineCount = 0;
+          var maxLines = 50000;
+          
+          // Mapped directly to E:/Projects/.../wsn_dacntt via Docker -v
+          var logDir = "/home/user/defense-project/src/data/logs";
+          
+          var dir = new File(logDir);
+          if (!dir.exists()) {
+              dir.mkdirs();
+          }
+          
+          var logFile = new FileWriter(logDir + "/run_" + fileIndex + ".log", false);
+          var cmdFile = new File(logDir + "/attack.cmd");
 
-TIMEOUT(3600000, logFile.close(); log.testOK(););
+          TIMEOUT(36000000);
 
 while (true) {
     YIELD();
@@ -607,7 +628,7 @@ while (true) {
             logFile.close();
             fileIndex++;
             lineCount = 0;
-            logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
+            logFile = new FileWriter(logDir + "/run_" + fileIndex + ".log", false);
         }
         
         // --- C&amp;C File Bridge Logic ---
@@ -622,6 +643,11 @@ while (true) {
                     if (m29 != null) write(m29, cmd);
                     var m53 = sim.getMoteWithID(53);
                     if (m53 != null) write(m53, cmd);
+                } else if (strCmd.startsWith("START_SYBIL") || strCmd.startsWith("STOP_SYBIL")) {
+                    for(var i=2; i&lt;=16; i++) {
+                        var m = sim.getMoteWithID(i);
+                        if (m != null) write(m, cmd);
+                    }
                 } else {
                     var m53 = sim.getMoteWithID(53);
                     if (m53 != null) write(m53, cmd);
