@@ -589,13 +589,6 @@
           var FileReader = Java.type("java.io.FileReader");
           var File = Java.type("java.io.File");
 
-<<<<<<< HEAD:src/wsn-2sink-sybil.csc
-var fileIndex = 1;
-var lineCount = 0;
-var maxLines = 50000;
-var logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
-var cmdFile = new File("../../../data/logs/attack.cmd");
-=======
           var fileIndex = 1;
           var lineCount = 0;
           var maxLines = 50000;
@@ -610,7 +603,6 @@ var cmdFile = new File("../../../data/logs/attack.cmd");
           
           var logFile = new FileWriter(logDir + "/run_" + fileIndex + ".log", false);
           var cmdFile = new File(logDir + "/attack.cmd");
->>>>>>> origin/sybil-vna-dashboard:src/attacks/wsn-2sink-sybil.csc
 
           TIMEOUT(3600000);
 
@@ -625,11 +617,7 @@ while (true) {
             logFile.close();
             fileIndex++;
             lineCount = 0;
-<<<<<<< HEAD:src/wsn-2sink-sybil.csc
-            logFile = new FileWriter("../../../data/logs/run_" + fileIndex + ".log", false);
-=======
             logFile = new FileWriter(logDir + "/run_" + fileIndex + ".log", false);
->>>>>>> origin/sybil-vna-dashboard:src/attacks/wsn-2sink-sybil.csc
         }
         
         // --- C&amp;C File Bridge Logic ---
