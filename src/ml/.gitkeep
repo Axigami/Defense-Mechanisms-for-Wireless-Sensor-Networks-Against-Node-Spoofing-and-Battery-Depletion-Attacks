@@ -1,0 +1,2 @@
+# This file keeps the ml directory in git
+# ML training data (*.csv), models (*.pkl, *.joblib) are gitignored

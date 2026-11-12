@@ -1,0 +1,206 @@
+#include "contiki.h"
+#include "net/routing/routing.h"
+#include "net/routing/rpl-lite/rpl.h"   
+#include "net/netstack.h"
+#include "simple-udp.h"
+#include "sys/energest.h"
+#include "sys/node-id.h"
+#include "sys/log.h"
+#include "dev/serial-line.h"
+#include <string.h>
+#include "lib/random.h"
+
+#define LOG_MODULE "NODE"
+#define LOG_LEVEL LOG_LEVEL_INFO
+
+#define SEND_PORT 8765
+#define SEND_INTERVAL     (60 * CLOCK_SECOND)
+#define STATUS_INTERVAL   (5 * CLOCK_SECOND)
+
+#define INITIAL_ENERGY_MJ 15000
+
+#define VOLTAGE_V        3.0
+#define CURRENT_TX_MA    17.4
+#define CURRENT_RX_MA    20.0
+#define CURRENT_CPU_MA    1.8
+#define CURRENT_LPM_MA    0.0545
+
+typedef struct {
+  uint16_t cluster_id;
+  uint16_t node_id_f;
+  uint32_t seqno;
+  uint32_t residual_mj;
+  uint32_t tx_time;
+  int16_t temperature_c;
+} sensor_payload_t;
+
+static struct simple_udp_connection udp_conn;
+
+static uint32_t residual_mj = INITIAL_ENERGY_MJ;
+static uint32_t last_cpu, last_lpm, last_tx, last_rx;
+static uint32_t sim_start_time;
+static uint8_t node_is_dead = 0;
+#include <stdbool.h>
+static bool is_attacking = false;
+static struct etimer et;
+static int global_temp = 250;
+
+static double
+energy_tick_and_get_duty(void)
+{
+  if(node_is_dead) {
+    return 0.0;
+  }
+
+  uint32_t cpu = energest_type_time(ENERGEST_TYPE_CPU) - last_cpu;
+  uint32_t lpm = energest_type_time(ENERGEST_TYPE_LPM) - last_lpm;
+  uint32_t tx  = energest_type_time(ENERGEST_TYPE_TRANSMIT) - last_tx;
+  uint32_t rx  = energest_type_time(ENERGEST_TYPE_LISTEN) - last_rx;
+  last_cpu += cpu; last_lpm += lpm; last_tx += tx; last_rx += rx;
+
+  double t_cpu = (double)cpu / ENERGEST_SECOND;
+  double t_lpm = (double)lpm / ENERGEST_SECOND;
+  double t_tx  = (double)tx  / ENERGEST_SECOND;
+  double t_rx  = (double)rx  / ENERGEST_SECOND;
+
+  double consumed_mj = VOLTAGE_V * (CURRENT_CPU_MA * t_cpu + CURRENT_LPM_MA * t_lpm
+                                    + CURRENT_TX_MA  * t_tx  + CURRENT_RX_MA  * t_rx);
+  
+  if(consumed_mj >= (double)residual_mj) {
+    residual_mj = 0;
+  } else {
+    residual_mj -= (uint32_t)consumed_mj;
+  }
+
+  double elapsed_radio_on_s = t_tx + t_rx;
+  double elapsed_total_s = t_cpu + t_lpm;
+  return elapsed_total_s > 0 ? (elapsed_radio_on_s / elapsed_total_s) * 100.0 : 0.0;
+}
+
+PROCESS(node_process, "Sensor node");
+PROCESS(status_process, "Status reporter");
+AUTOSTART_PROCESSES(&node_process, &status_process);
+
+PROCESS_THREAD(node_process, ev, data)
+{
+  
+  static uip_ipaddr_t dest_ipaddr;
+  static uint16_t cluster_id;
+  static uint32_t gen_count = 0, sent_count = 0;
+
+  PROCESS_BEGIN();
+  sim_start_time = clock_time();
+
+  simple_udp_register(&udp_conn, SEND_PORT, NULL, SEND_PORT, NULL);
+  etimer_set(&et, random_rand() % SEND_INTERVAL);
+
+  while(1) {
+    PROCESS_WAIT_EVENT();
+    
+    if(ev == serial_line_event_message && data != NULL) {
+      char *str = (char *)data;
+      if(strncmp(str, "START_SYBIL", 11) == 0) {
+        LOG_INFO("Received START_SYBIL command via serial.\n");
+        is_attacking = true;
+        etimer_set(&et, CLOCK_SECOND + (node_id * (CLOCK_SECOND / 10)));
+      }
+      else if(strncmp(str, "STOP_SYBIL", 10) == 0) {
+        LOG_INFO("Received STOP_SYBIL command via serial.\n");
+        is_attacking = false;
+        etimer_set(&et, SEND_INTERVAL);
+      }
+    }
+
+    if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
+
+    energy_tick_and_get_duty();
+    
+    if(residual_mj == 0 && !node_is_dead) {
+      node_is_dead = 1;
+      uint32_t alive_s = (clock_time() - sim_start_time) / CLOCK_SECOND;
+      
+      LOG_INFO("DEAD cluster=%u node=%u time_alive_s=%lu last_seq=%lu total_gen=%lu total_sent=%lu\n",
+               cluster_id, node_id, (unsigned long)alive_s,
+               (unsigned long)(sent_count > 0 ? sent_count - 1 : 0), 
+               (unsigned long)gen_count, (unsigned long)sent_count);
+      
+      PROCESS_EXIT();
+    }
+    
+    if(node_is_dead) {
+      PROCESS_EXIT();
+    }
+
+    gen_count++;
+
+    if(NETSTACK_ROUTING.node_is_reachable() &&
+       NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
+      
+      uint8_t root_id = dest_ipaddr.u8[15];
+      if(root_id == 1) cluster_id = 1;
+      else if(root_id == 27 || root_id == 0x1b) cluster_id = 2;
+
+      LOG_INFO("GEN cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
+
+      if(is_attacking) {
+          if (global_temp < 850) {
+              global_temp += 50;
+          }
+      } else {
+          global_temp = 250 + (random_rand() % 50);
+      }
+      int16_t current_temp = global_temp;
+
+      sensor_payload_t p = {
+        .cluster_id = cluster_id, .node_id_f = node_id,
+        .seqno = sent_count++, .residual_mj = residual_mj, .tx_time = clock_time(),
+        .temperature_c = current_temp
+      };
+      simple_udp_sendto(&udp_conn, &p, sizeof(p), &dest_ipaddr);
+      LOG_INFO("TX cluster=%u node=%u seq=%lu energy_mj=%lu bytes=%u\n",
+               cluster_id, node_id, (unsigned long)p.seqno,
+               (unsigned long)residual_mj, (unsigned int)sizeof(p));
+    } else {
+      LOG_INFO("GEN cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
+      LOG_INFO("TXFAIL cluster=%u node=%u gen_count=%lu\n", cluster_id, node_id, (unsigned long)gen_count);
+    }
+    
+    if(is_attacking) {
+        etimer_set(&et, 3 * CLOCK_SECOND);
+    } else {
+        etimer_set(&et, SEND_INTERVAL);
+    }
+    
+  } /* end of if(ev == PROCESS_EVENT_TIMER) */
+  } /* end of while(1) */
+  PROCESS_END();
+}
+
+PROCESS_THREAD(status_process, ev, data)
+{
+  static struct etimer et;
+  PROCESS_BEGIN();
+  
+  while(1) {
+    etimer_set(&et, STATUS_INTERVAL);
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+    if(node_is_dead) {
+      LOG_INFO("STATUS node=%u STOPPED\n", node_id);
+      PROCESS_EXIT();
+    }
+
+    double duty = energy_tick_and_get_duty();
+    uint16_t rank = curr_instance.dag.rank;
+    LOG_INFO("STATUS node=%u energy_mj=%lu duty_pct=%d rank=%u\n",
+             node_id, (unsigned long)residual_mj, (int)duty, rank);
+  }
+  PROCESS_END();
+}
+
+
+
+
+
+
+

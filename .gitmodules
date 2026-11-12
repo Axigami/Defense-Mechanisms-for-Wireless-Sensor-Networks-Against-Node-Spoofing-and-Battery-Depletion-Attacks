@@ -1,0 +1,3 @@
+[submodule "src/contiki-ng"]
+    path = src/contiki-ng
+    url = https://github.com/Axigami/contiki-ng.git
